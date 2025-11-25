@@ -1,6 +1,5 @@
 duplicateReferees.csv
 event_descriptions.csv
 teams_clean.csv
-pitch.py
 normaliz_matches.py
 gener_description.py
