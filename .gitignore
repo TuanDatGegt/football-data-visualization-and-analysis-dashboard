@@ -3,3 +3,4 @@ event_descriptions.csv
 teams_clean.csv
 gener_description.py
 .env
+__pycache__
