@@ -1,5 +1,5 @@
 duplicateReferees.csv
 event_descriptions.csv
 teams_clean.csv
-normaliz_matches.py
 gener_description.py
+.env
