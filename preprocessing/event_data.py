@@ -31,3 +31,22 @@ def add_position_in_meters(df_events, cols_length, cols_width, field_length, fie
     df = df.drop(columns = cols_length + cols_width)
 
     return df
+
+
+def set_positions(df_events, reverse, field_length=105, field_width = 68):
+    """
+    Docstring for set_positions
+    
+    :param df_events: Description
+    :param reverse: Description
+    :param field_length: Description
+    :param field_width: Description
+    """
+
+    pos_cols = ['posOrigX', 'posOrigY', 'posDestX', 'posDestY']
+
+    for col in pos_cols:
+        df_events[col].clip(lower=0, upper=1, inplace=True)
+
+        if reverse:
+            df_events[col] = 1-df_events[col]
