@@ -1,8 +1,59 @@
-# -*- coding: utf-8 -*-
-
 # import packages
+import sys
 import numpy as np
 import pandas as pd
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(ROOT))
+
+
+from preprocessing.db_config import get_engine
+
+SQL_FOLDER = ROOT / "SQL_Query"
+
+def load_sql_file(filename='event_data.sql'):
+    path = SQL_FOLDER /filename
+    if not path.exists():
+        raise FileNotFoundError(f"Khong tim thay file SQL: {path}")
+    
+    with open(path, 'r', encoding='utf-8') as f:
+        return f.read()
+    
+def load_event_data(sql_filename = 'event_data.sql', engine = None):
+    if engine is None:
+        engine = get_engine()
+    query = load_sql_file(sql_filename)
+    df = pd.read_sql(query, engine)
+    return df
+
+
+def cleaning_positions(df):
+    """
+    Normalization positions before convert to metter.
+    :param df: DataFrame of head for nomalization
+    """
+
+    #Sửa subEventName có nhãn Goal kick về vị trí ở cầu môn nhà(5, 50)
+    df['posOrigX'] = np.where(
+        df['subEventName'] == 'Goal kick', 5, df['posOrigX']
+    )
+    df['posOrigY'] = np.where(
+        df['subEventName'] == 'Goal kick', 50, df['posOrigY']
+    )
+
+
+    #Sửa subEventName có Save attempt và Reflexes về vị trí thủ môn nhà (0, 50)
+    df['posOrigX'] = np.where(
+        df['subEventName'].isin(['Save attempt', 'Reflexes']), 0, df['posOrigX']
+    )
+    df['posOrigY'] = np.where(
+        df['subEventName'].isin(['Save attempt', 'Reflexes']), 50, df['posOrigY']
+    )
+    return df
+
+
 
 def add_position_in_meters(df_events, cols_length, cols_width, field_length, field_width):
     """
@@ -32,16 +83,24 @@ def add_position_in_meters(df_events, cols_length, cols_width, field_length, fie
 
     return df
 
+#add_position_in_meters(df_events=df, , field_length=105, field_width=68)
+def load_and_process_event_data(sql_filename='event_data.sql', field_length=105, field_width=68, cols_length=["posOrigX", "posDestX"], cols_width=["posOrigY", "posDestY"], engine = None):
+    df = load_event_data(sql_filename, engine)
+    df = cleaning_positions(df)
+    df = add_position_in_meters(df, cols_length, cols_width, field_length, field_width)
 
+    return df
+
+"""
 def set_positions(df_events, reverse, field_length=105, field_width = 68):
-    """
+    '''
     Docstring for set_positions
     
     :param df_events: Description
     :param reverse: Description
     :param field_length: Description
     :param field_width: Description
-    """
+    '''
 
     pos_cols = ['posOrigX', 'posOrigY', 'posDestX', 'posDestY']
 
@@ -50,3 +109,4 @@ def set_positions(df_events, reverse, field_length=105, field_width = 68):
 
         if reverse:
             df_events[col] = 1-df_events[col]
+"""
