@@ -53,11 +53,10 @@ SELECT
 
     -- Body part code cho xG
     CASE
-        WHEN T.BodyPartTagID = 403 THEN 0
-        WHEN T.BodyPartTagID = 401 AND P.foot = 'right' THEN 1 --Weak foot
-        WHEN T.BodyPartTagID = 402 AND P.foot = 'left' THEN 1 --Weak foot
-        WHEN T.BodyPartTagID IN (401, 402) THEN 2 --Strong foot
-        ELSE NULL
+        WHEN T.BodyPartTagID = 403 THEN 2
+        WHEN T.BodyPartTagID = 401 THEN 1
+        WHEN T.BodyPartTagID = 402 THEN 3
+        ELSE 0
     END AS bodyPartShotCode
 
 FROM EVENTS AS EV
