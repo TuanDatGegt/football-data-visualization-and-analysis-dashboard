@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
+filename = 'data_Wyscount_event.sql'
+
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
@@ -13,7 +15,7 @@ from preprocessing.db_config import get_engine
 
 SQL_FOLDER = ROOT / "SQL_Query"
 
-def load_sql_file(filename='event_data.sql'):
+def load_sql_file(filename=filename):
     path = SQL_FOLDER /filename
     if not path.exists():
         raise FileNotFoundError(f"Khong tim thay file SQL: {path}")
@@ -21,7 +23,7 @@ def load_sql_file(filename='event_data.sql'):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
     
-def load_event_data(sql_filename = 'event_data.sql', engine = None):
+def load_event_data(sql_filename = filename, engine = None):
     if engine is None:
         engine = get_engine()
     query = load_sql_file(sql_filename)
@@ -84,7 +86,7 @@ def add_position_in_meters(df_events, cols_length, cols_width, field_length, fie
     return df
 
 #add_position_in_meters(df_events=df, , field_length=105, field_width=68)
-def load_and_process_event_data(sql_filename='event_data.sql', field_length=105, field_width=68, cols_length=["posOrigX", "posDestX"], cols_width=["posOrigY", "posDestY"], engine = None):
+def load_and_process_event_data(sql_filename=filename, field_length=105, field_width=68, cols_length=["posOrigX", "posDestX"], cols_width=["posOrigY", "posDestY"], engine = None):
     df = load_event_data(sql_filename, engine)
     df = cleaning_positions(df)
     df = add_position_in_meters(df, cols_length, cols_width, field_length, field_width)
