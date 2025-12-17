@@ -1,0 +1,5 @@
+SELECT
+	ET.eventRecordID, TN.tagID, TN.Description
+FROM EVENTTAGS AS ET
+JOIN TAGSNAME AS TN
+	ON ET.tagID = TN.tagID
