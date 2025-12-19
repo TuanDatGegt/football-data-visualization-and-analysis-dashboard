@@ -3,17 +3,19 @@ import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from preprocessing.db_config import get_engine
-from preprocessing.tagsname import extract_tags_mapping_query
+from db_config import get_engine
+from tagsname import extract_tags_mapping_query
 
 ## CẤU HÌNH ĐƯỜNG DẪN
 ROOT = Path(__file__).resolve().parent.parent
+
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+
 SQL_FOLDER = ROOT / "SQL_Query"
 DATASET_FOLEDER = ROOT / "dataset"
 DATA_EXTRACTION_FOLDER = DATASET_FOLEDER / "data_extractions"
 DATA_TRANSFORM_FOLDER = DATASET_FOLEDER / "data_transforms"
-
-sys.path.append(str(ROOT))
 
 events_filename = 'data_Wyscount_event.sql'
 tagsname_filename = 'tagsName.sql'
@@ -25,25 +27,29 @@ def load_sql_file(filename):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
     
-def extract_events_data(engine = None):
+def extract_events_data(engine = None, save = False):
     """
     Extract data event.
     """
     #Extract event dataset and save file extractions
+    if engine is None:
+        engine = get_engine()
     event_query = load_sql_file(events_filename)
     df_events = pd.read_sql(event_query, engine)
 
-    extract_events_path = DATA_EXTRACTION_FOLDER / "events_raw.parquet"
-    df_events.to_parquet(extract_events_path, index=False, engine='pyarrow')
-    print(f"Save a backup of raw data events: {extract_events_path}")
+
+    if save:
+        extract_events_path = DATA_EXTRACTION_FOLDER / "events_raw.parquet"
+        df_events.to_parquet(extract_events_path, index=False, engine='pyarrow')
+        print(f"Save a backup of raw data events: {extract_events_path}")
 
     return df_events
 
-def apply_tags_pivot(df_events, df_tags):
+def apply_tags_pivot(df_events, engine):
     """
     Extract tags name from tagsName.sql and mapping tags with events
     """
-    df_tags = extract_tags_mapping_query(engine = None)
+    df_tags = extract_tags_mapping_query(engine)
     tags_pivot = df_tags.pivot_table(
         index= 'eventRecordID',
         columns='Description',
@@ -77,15 +83,15 @@ def clean_and_convert_positions(df, field_length = 105, field_width = 68):
     :param field_width: (int) Width of the field in meters
     :return: pd.DataFrame with additional columns ending in "Meters" that contain the coordinates in meters.
     """
-    df.loc[df['subEventName'] == 'Goal kick', ['posOrigX', 'posOrigY']] == [5, 50]
+    df.loc[df['subEventName'] == 'Goal kick', ['posOrigX', 'posOrigY']] = [5, 50]
     mask_save = df['subEventName'].isin(['Save attempt', 'Reflexes'])
-    df.loc[mask_save, ['posOrigX', 'posOrigY']] == [0, 50]
+    df.loc[mask_save, ['posOrigX', 'posOrigY']] = [0, 50]
 
     #Conver position to Meters
-    df['posBeforeXMeter'] = np.round(df['posOrigX'] * field_length / 100, 2)
-    df['posBeforeYMeter'] = np.round(df['posOrigY'] * field_width / 100, 2)
-    df['posAfterXMeter'] = np.round(df['posDestX'] * field_length / 100, 2)
-    df['posAfterYMeter'] = np.round(df['posDestY'] * field_width / 100, 2)
+    df['posBeforeXMeters'] = np.round(df['posOrigX'] * field_length / 100, 2)
+    df['posBeforeYMeters'] = np.round(df['posOrigY'] * field_width / 100, 2)
+    df['posAfterXMeters'] = np.round(df['posDestX'] * field_length / 100, 2)
+    df['posAfterYMeters'] = np.round(df['posDestY'] * field_width / 100, 2)
 
     return df.drop(columns = ['posOrigX', 'posOrigY', 'posDestX', 'posDestY'])
 
@@ -93,8 +99,7 @@ def compute_possession(df):
     """
     comput column teamPossession
     """
-
-    pos = pd.Series(np.nan, index = df.index())
+    pos = pd.Series(np.nan, index = df.index)
 
     active = ['Pass', 'Free kick', 'Others on the ball', 'Shot', 'Save attempt']
     pos.loc[df['eventName'].isin(active)] = df['teamID']
@@ -115,8 +120,6 @@ def compute_possession(df):
 def compute_bodyPartShot(df):
     """
     Docstring for compute_bodyPartShot
-    
-    :param df: Description
     """
     left = df['Left foot'] if 'Left foot' in df.columns else pd.Series(0, index=df.index)
     right = df['Right foot'] if 'Right foot' in df.columns else pd.Series(0, index=df.index)
@@ -160,12 +163,12 @@ def finalized_transform(df, extra_tags):
 
     all_cols = base_cols + [c for c in extra_tags if c not in ['Accurate', 'Not accurate', 'Left foot', 'Right foot', 'Head/body']]
 
-    final_cols = [c for c in all_cols if c not in df.columns]
+    final_cols = [c for c in all_cols if c in df.columns]
 
     return df[final_cols]
 
-def run_pipeline():
-    engine = engine
+def run_pipeline(save = False):
+    engine = get_engine()
 
     df_raw = extract_events_data(engine)
 
@@ -175,14 +178,14 @@ def run_pipeline():
 
     df_final = finalized_transform(df_clean, tag_cols)
 
-    output_path = DATA_TRANSFORM_FOLDER / "event_data_transform.parquet"
-    df_final.to_parquet(output_path, engine='pyarrow', index = False)
-
-    print(f"Transform Event Data Compeletely!")
+    if save:
+        output_path = DATA_TRANSFORM_FOLDER / "event_data_transform.parquet"
+        df_final.to_parquet(output_path, engine='pyarrow', index = False)
+        print(f"Transform Event Data Compeletely!")
 
     return df_final
 
 if __name__ == "__main__":
-    run_pipeline()
+    run_pipeline(save = False)
 
     
