@@ -1,7 +1,7 @@
 import sys
 import pandas as pd
 import numpy as np
-import pathlib as Path
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
@@ -9,7 +9,7 @@ sys.path.append(str(ROOT))
 from preprocessing.db_config import get_engine
 
 
-SQL_FOLDER = ROOT / "SQL_query"
+SQL_FOLDER = ROOT / "SQL_Query"
 DATASET_FOLDER = ROOT / "dataset"
 DATA_EXTRACTION_FOLDER = DATASET_FOLDER / "data_extractions"
 
