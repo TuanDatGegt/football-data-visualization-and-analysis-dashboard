@@ -3,14 +3,16 @@ import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from db_config import get_engine
-from tagsname import extract_tags_mapping_query
+
+
+from preprocessing.db_config import get_engine
+from preprocessing.tagsname import extract_tags_mapping_query
 
 ## CẤU HÌNH ĐƯỜNG DẪN
 ROOT = Path(__file__).resolve().parent.parent
-
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
+
 
 SQL_FOLDER = ROOT / "SQL_Query"
 DATASET_FOLEDER = ROOT / "dataset"
@@ -20,6 +22,11 @@ DATA_TRANSFORM_FOLDER = DATASET_FOLEDER / "data_transforms"
 events_filename = 'data_Wyscount_event.sql'
 tagsname_filename = 'tagsName.sql'
 
+FIELD_LENGTH = 105
+FIELD_WIDTH = 68
+
+
+#=====LOAD FILE SQL
 def load_sql_file(filename):
     path = SQL_FOLDER /filename
     if not path.exists():
@@ -27,6 +34,7 @@ def load_sql_file(filename):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
     
+#=====EXTRACT EVENT
 def extract_events_data(engine = None, save = False):
     """
     Extract data event.
@@ -45,11 +53,13 @@ def extract_events_data(engine = None, save = False):
 
     return df_events
 
-def apply_tags_pivot(df_events, engine):
+
+#=====MAPPING TAGS INTO EVENTS
+def apply_tags_pivot(df_events, engine, save = False):
     """
     Extract tags name from tagsName.sql and mapping tags with events
     """
-    df_tags = extract_tags_mapping_query(engine)
+    df_tags = extract_tags_mapping_query(engine, save)
     tags_pivot = df_tags.pivot_table(
         index= 'eventRecordID',
         columns='Description',
@@ -70,9 +80,11 @@ def apply_tags_pivot(df_events, engine):
     else:
         df['accurate_flag'] = 0
 
-    return df, tag_cols    
+    return df, tag_cols
 
-def clean_and_convert_positions(df, field_length = 105, field_width = 68):
+
+#=====POSSITION PROCESSING
+def convert_positions_to_meters(df, field_length = 105, field_width = 68):
     """
     Normalization positions before convert to metter. Computes the position in meters instead of only a 0-100 scale.
     
@@ -95,13 +107,44 @@ def clean_and_convert_positions(df, field_length = 105, field_width = 68):
 
     return df.drop(columns = ['posOrigX', 'posOrigY', 'posDestX', 'posDestY'])
 
+
+def flip_coordinates(df):
+    """
+    Standardize player positions from left to right.
+    """
+    is_home = df['teamID'] == df['homeTeamID']
+    is_1H = df['matchPeriod'] == "1H"
+
+    homeTeam_match2 = (is_home == True) & (is_1H==False)
+    awayTeam_match1 = (is_home == False) & (is_1H==True)
+ 
+    flip_mask = homeTeam_match2 | awayTeam_match1
+
+    for col in ['posBeforeXMeters', 'posBeforeYMeters']:
+        df.loc[flip_mask, col] = FIELD_LENGTH - df.loc[flip_mask, col]
+
+    return df
+
+
+def clean_position(df):
+    df = df.dropna(subset=['posBeforeXMeters', 'posBeforeYMeters'])
+
+    df = df[
+        df['posBeforeXMeters'].between(0, FIELD_LENGTH)
+        & df['posBeforeYMeters'].between(0, FIELD_WIDTH)
+    ]
+
+    return df
+
+
+
 def compute_possession(df):
     """
     comput column teamPossession
     """
     pos = pd.Series(np.nan, index = df.index)
 
-    active = ['Pass', 'Free kick', 'Others on the ball', 'Shot', 'Save attempt']
+    active = ['Pass', 'Free kick', 'Others on the ball', 'Shot', 'Save attempt', 'Goalkeeper leaving line']
     pos.loc[df['eventName'].isin(active)] = df['teamID']
 
     is_duel = (df['eventName'] == 'Duel')
@@ -121,26 +164,27 @@ def compute_bodyPartShot(df):
     """
     Docstring for compute_bodyPartShot
     """
-    left = df['Left foot'] if 'Left foot' in df.columns else pd.Series(0, index=df.index)
-    right = df['Right foot'] if 'Right foot' in df.columns else pd.Series(0, index=df.index)
-    head_body = df['Head/body'] if 'Head/body' in df.columns else pd.Series(0, index = df.index)
+    left = df.get("Left foot", 0)
+    right = df.get("Right foot", 0)
+    head = df.get("Head/body", 0)
 
-    conditions = [
-        (left == 1),
-        (head_body == 1),
-        (right == 1)
-    ]
+    df["bodyPartShot"] = np.select(
+        [left == 1, head == 1, right == 1],
+        ['leftFoot', 'head/body', 'rightFoot'],
+        default='Unknown'
+    )
 
-    choice_str = ['leftFoot', 'head/body', 'rightFoot']
-
-    choice_code = [1, 2, 3]
-
-    df['bodyPartShot'] = np.select(conditions, choice_str, default='Unknown')
-    df['bodyPartShotCode'] = np.select(conditions, choice_code, default= 0)
+    df["bodyPartShotCode"] = np.select(
+        [left == 1, head == 1, right == 1],
+        [1, 2, 3],
+        default=0
+    )
 
     return df
 
-def finalized_transform(df, extra_tags):
+
+
+def finalized_transform(df):
     df['teamPossession'] = compute_possession(df)
 
     df = compute_bodyPartShot(df)
@@ -152,19 +196,27 @@ def finalized_transform(df, extra_tags):
         "foot": "playerStrongFoot",
         "accurate_flag": "accurate"
     }
-
     df.rename(columns = rename_map, inplace=True)
-    
-    base_cols = [
-        'ID', 'matchID', 'matchPeriod', 'eventSec', 'eventName', 'subEventName', 'teamID',
-        'posBeforeXMeters', 'posBeforeYMeters', 'posAfterXMeters', 'posAfterYMeters', 'playerID',
-        'playerName', 'playerPosition', 'playerStrongFoot', 'teamPossession', 'homeTeamID', 'awayTeamID', 'accurate', 'notAccurate', 'bodyPartShot', 'bodyPartShotCode'
+
+    for col in ['Goal', 'Own goal', 'Couter attack']:
+        if col not in df.columns:
+            df[col] = 0
+        df[col] = df[col].fillna(0).astype(int)
+
+
+    #Sort columns to keep
+    cols_to_keep = [
+        'ID', 'matchID', 'matchPeriod', 'eventSec', 'eventName', 'subEventName',
+        'teamID', 'posBeforeXMeters', 'posBeforeYMeters',
+        'posAfterXMeters', 'posAfterYMeters',
+        'playerID', 'playerName', 'playerPosition', 'playerStrongFoot',
+        'teamPossession', 'homeTeamID', 'awayTeamID',
+        'Goal', 'Own goal', 'Counter attack',
+        'bodyPartShot', 'bodyPartShotCode'
     ]
 
-    all_cols = base_cols + [c for c in extra_tags if c not in ['Accurate', 'Not accurate', 'Left foot', 'Right foot', 'Head/body']]
-
-    final_cols = [c for c in all_cols if c in df.columns]
-
+    final_cols = [c for c in cols_to_keep if c in df.columns]
+    
     return df[final_cols]
 
 def run_pipeline(save = False):
@@ -172,11 +224,15 @@ def run_pipeline(save = False):
 
     df_raw = extract_events_data(engine)
 
-    df_map, tag_cols = apply_tags_pivot(df_raw, engine)
+    df_map, tag_cols = apply_tags_pivot(df_raw, engine, save)
 
-    df_clean = clean_and_convert_positions(df_map)
+    df = convert_positions_to_meters(df_map)
+    df = clean_position(df)
+    df_flip = flip_coordinates(df)
 
-    df_final = finalized_transform(df_clean, tag_cols)
+
+
+    df_final = finalized_transform(df_flip)
 
     if save:
         output_path = DATA_TRANSFORM_FOLDER / "event_data_transform.parquet"
