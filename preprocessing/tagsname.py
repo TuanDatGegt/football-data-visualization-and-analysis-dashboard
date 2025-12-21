@@ -27,7 +27,7 @@ def load_tags_sql(filename = SQL_filename):
     
 
 
-def extract_tags_mapping_query(engine = None, save_raw=True):
+def extract_tags_mapping_query(engine = None, save=False):
     """
     Extract query for mapping Description to tagID
     """
@@ -38,7 +38,7 @@ def extract_tags_mapping_query(engine = None, save_raw=True):
     print(f"-----Đang truy vấn tagsName-----")
     df_tags = pd.read_sql(query, engine)
 
-    if save_raw:
+    if save:
         save_path = DATA_EXTRACTION_FOLDER / "tagsName.parquet"
         df_tags.to_parquet(save_path, index=False, engine='pyarrow')
         print(f"-----Đã sao lưu file tagsName: {save_path}-----")
@@ -47,7 +47,7 @@ def extract_tags_mapping_query(engine = None, save_raw=True):
 
 if __name__ == "__main__":
     try:
-        extract_tags_mapping_query()
+        extract_tags_mapping_query(save=False)
         print(f"-----Cập nhật tagsName thành công!-----")
     except Exception as e:
         print(f"-----Lỗi hệ thống {e}-----")
