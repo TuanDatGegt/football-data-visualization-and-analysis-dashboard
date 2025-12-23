@@ -112,16 +112,18 @@ def flip_coordinates(df):
     """
     Standardize player positions from left to right.
     """
-    is_home = df['teamID'] == df['homeTeamID']
-    is_1H = df['matchPeriod'] == "1H"
-
-    homeTeam_match2 = (is_home == True) & (is_1H==False)
-    awayTeam_match1 = (is_home == False) & (is_1H==True)
+    df = df.copy()
  
-    flip_mask = homeTeam_match2 | awayTeam_match1
+    shot_mask = df['eventName'] == 'Shot'
 
-    for col in ['posBeforeXMeters', 'posBeforeYMeters']:
-        df.loc[flip_mask, col] = FIELD_LENGTH - df.loc[flip_mask, col]
+    flip_mask = shot_mask & (df["posBeforeXMeters"] < (FIELD_LENGTH / 2))
+
+    df.loc[flip_mask, 'posBeforeXMeters'] = (FIELD_LENGTH - df.loc[flip_mask, 'posBeforeXMeters'])
+    df.loc[flip_mask, 'posAfterXMeters'] = (FIELD_LENGTH - df.loc[flip_mask, 'posAfterXMeters'])
+
+    # Flip Y (PHẢI dùng FIELD_WIDTH)
+    df.loc[flip_mask, 'posBeforeYMeters'] = (FIELD_WIDTH - df.loc[flip_mask, 'posBeforeYMeters'])
+    df.loc[flip_mask, 'posAfterYMeters'] = (FIELD_WIDTH - df.loc[flip_mask, 'posAfterYMeters'])
 
     return df
 
@@ -198,7 +200,7 @@ def finalized_transform(df):
     }
     df.rename(columns = rename_map, inplace=True)
 
-    for col in ['Goal', 'Own goal', 'Couter attack']:
+    for col in ['Goal', 'Own goal', 'Counter attack']:
         if col not in df.columns:
             df[col] = 0
         df[col] = df[col].fillna(0).astype(int)
@@ -222,15 +224,13 @@ def finalized_transform(df):
 def run_pipeline(save = False):
     engine = get_engine()
 
-    df_raw = extract_events_data(engine)
+    df_raw = extract_events_data(engine, save)
 
     df_map, tag_cols = apply_tags_pivot(df_raw, engine, save)
 
     df = convert_positions_to_meters(df_map)
-    df = clean_position(df)
     df_flip = flip_coordinates(df)
-
-
+    df = clean_position(df)
 
     df_final = finalized_transform(df_flip)
 
