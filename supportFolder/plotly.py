@@ -126,18 +126,16 @@ class create_soccer_Pitch:
         return self.fig
     
 
-    def add_shots_(self, df):
+    def add_shots_(self, df, x_start="posBeforeXMeters", y_start="posBeforeYMeters", goal_col="Goal"):
         """
         Required dataframe must be x, y, xG, result(Goal/No Goal)
         """
+        df['result'] = df[goal_col].map({1:"Goal", 0:"No Goal"})
+        colors={"Goal": "#00FF00", "No Goal" : "#FF0000"}
         for res in df['result'].unique():
             data=df[df['result']==res]
-            self.fig.add_trace(go.Scatter(
-                x=data['x'], y=data['y'], mode="markers",
-                name=res,
-                marker=dict(size=data['xG']*35, line=dict(width=1, color="white"), opacity=0.8),
-                hovertemplate="xG: %{marker.size}<extra></extra>"
-            ))
+            self.fig.add_trace(go.Scatter(x=data[x_start], y=data[y_start], mode="markers", name=res,
+                                          marker=dict(size=12, color=colors.get(res, "white"), line=dict(width=1, color="white"), opacity=0.8)))
         return self.fig
     
     def add_events_(self, x_start, y_start, x_end, y_end, color="yellow"):
@@ -169,3 +167,5 @@ class create_soccer_Pitch:
 
         return self.fig
     
+    def show(self):
+        self.fig.show()
