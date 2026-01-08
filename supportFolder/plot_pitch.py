@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 #import scrip
 
+
 class create_soccer_Pitch:
     """
     Module support for soccer visualize 
@@ -83,24 +84,24 @@ class create_soccer_Pitch:
         return np.clip(idx, 0, len(edges) - 2)
     
     
-    def add_binned_heatmap(self, df, col_x, col_y, metrics, nb_buckets_x=24, nb_buckets_y=17):
+    def add_binned_heatmap(self, df, col_x, col_y, metrics, nb_buckets_x=24, nb_buckets_y=17, return_df=False):
 
-        df = df.copy()
+        df_result = df.copy()
 
         x_edges, x_centers = self._build_grid(0, self.length, nb_buckets_x)
         y_edges, y_centers = self._build_grid(0, self.width, nb_buckets_y)
 
-        df["x_Zone"] = self._assign_bucket(df[col_x], x_edges)
-        df["y_Zone"] = self._assign_bucket(df[col_y], y_edges)
+        df_result["x_Zone"] = self._assign_bucket(df[col_x], x_edges)
+        df_result["y_Zone"] = self._assign_bucket(df[col_y], y_edges)
 
-        df = df[
-            df.x_Zone.between(0, nb_buckets_x - 1) &
-            df.y_Zone.between(0, nb_buckets_y - 1)
-        ]
+        df_filtered = df_result[
+            df_result.x_Zone.between(0, nb_buckets_x - 1) &
+            df_result.y_Zone.between(0, nb_buckets_y - 1)
+        ].copy()
         
         grouped = (
-            df.groupby(["x_Zone", "y_Zone"]).agg(**{
-                k: (v["col"] if v["col"] else col_x,v["agg"])
+            df_filtered.groupby(["x_Zone", "y_Zone"]).agg(**{
+                k: (v["col"] if v["col"] else col_x, v["agg"])
                 for k, v in metrics.items()
             }).reset_index()
         )
@@ -116,6 +117,9 @@ class create_soccer_Pitch:
             k: grouped.pivot(index='y_Zone', columns='x_Zone', values=k).values
             for k in metrics
         }
+
+        if return_df:
+            return df_result, matrices, x_centers, y_centers
 
         return matrices, x_centers, y_centers
     
