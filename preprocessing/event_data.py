@@ -173,7 +173,7 @@ def compute_bodyPartShot(df):
     df["bodyPartShot"] = np.select(
         [left == 1, head == 1, right == 1],
         ['leftFoot', 'head/body', 'rightFoot'],
-        default='Unknown'
+        default='unknown'
     )
 
     df["bodyPartShotCode"] = np.select(
