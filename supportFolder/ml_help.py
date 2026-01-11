@@ -99,7 +99,7 @@ class MachineLearningHelp:
                         0
                     )
                 )
-        )
+            )
 
 
         #howver text
@@ -429,11 +429,11 @@ class MachineLearningHelp:
                 col_j = columns[j]
 
                 if i == j:
-                    corr[col_i][col_j] = 1.0
+                    corr.loc[col_i,col_j] = 1.0
                 else:
                     val_1, val_2 = MachineLearningHelp.compute_associations(dataset, col_i, col_j, nominal_cols, theil_u,)
-                    corr[col_j][col_i] = val_1
-                    corr[col_i][col_j] = val_2
+                    corr.loc[col_j,col_i] = val_1
+                    corr.loc[col_i,col_j] = val_2
 
         corr.fillna(value=np.nan, inplace=True)
 
