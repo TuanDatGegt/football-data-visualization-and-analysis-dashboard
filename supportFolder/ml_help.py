@@ -1,13 +1,16 @@
 import numpy as np
 import pandas as pd
+import math
 import plotly.graph_objects as go
+import scipy.stats as ss
+from collections import Counter
 from pandas._testing import assert_frame_equal
 from plotly.subplots import make_subplots
 from plotly.colors import DEFAULT_PLOTLY_COLORS
 
 class MachineLearningHelp:
-    @staticmethod
 
+    @staticmethod
     def build_bucket_zone(df, col, step_size, min_value = None, max_value = None, delete = False):
         """
         Docstring for build_bucket_zone
@@ -27,7 +30,7 @@ class MachineLearningHelp:
                 factor = f
                 break
         if factor is None:
-            raise ValueError("Chỉ sử dụng các bước nhảy có thể chuyển đổi thành số nguyên bằng cách nhân với 1000.")
+            raise ValueError("Giá trị step không hợp lệ. Step phải có dạng sao cho khi nhân với 1000 thì thu được một số nguyên.")
 
         df[col] = df[col] * factor
         step_size = step_size * factor
@@ -172,13 +175,15 @@ class MachineLearningHelp:
 
         return fig, df_group
 
-    
+
+    @staticmethod
     def check_columns_match(df1, df2, columns):
         
         assert_frame_equal(df1[columns], df2[columns])
         return True
     
 
+    @staticmethod
     def combine_variable_graph(figures, cols, rows, shared_axis=False):
         titles = [
             fig['layout']['title']['text']
@@ -245,5 +250,203 @@ class MachineLearningHelp:
         )
 
         return fig
+    
+
+    @staticmethod
+    def convert(data, target):
+        
+        if target == "array":
+            if isinstance(data, np.ndarray):
+                result = data
+            elif isinstance(data, pd.Series):
+                result = data.to_numpy()
+            elif isinstance(data, list):
+                result = np.asarray(data)
+            elif isinstance(data, pd.DataFrame):
+                result = data.values
+            else:
+                result = None
+
+        elif target == "list":
+            if isinstance(data, list):
+                result = data
+            elif isinstance(data, (pd.Series, np.ndarray)):
+                result = list(data)
+            else:
+                result = None
+
+        elif target == "dataframe":
+            if isinstance(data, pd.DataFrame):
+                result = data
+            elif isinstance(data, np.ndarray):
+                result = pd.DataFrame(data)
+            else:
+                result = None
+        
+        else: 
+            raise ValueError(f"Không thể chuyển đổi kiểu dữ liệu: {target}")
+        
+        if result is None:
+            raise TypeError(f"Không thể chuyển đổi kiểu dữ liệu cho đối tượng: {type(data)} tới {target}")
+        
+        return result
+    
+
+    @staticmethod
+    def cramers_v(x, y):
+        confusion = pd.crosstab(x, y)
+        chisq = ss.chi2_contingency(confusion)[0]
+
+        n = confusion.values.sum()
+        phisq = chisq/n
+
+        r, k = confusion.shape
+
+        phisq_corr = max(
+            0.0, phisq - ((k - 1 ) * (r - 1)) / (n - 1)
+        )
+
+        r_corr = r - ((r - 1)**2) / (n - 1)
+        k_corr = k - ((k - 1)**2) / (n - 1)
+
+        return np.sqrt(phisq_corr / min(k_corr - 1, r_corr - 1))
+    
+
+    @staticmethod
+    def conditional_entropy(x, y):
+        joint_counts = Counter(zip(x, y))
+        y_counts = Counter(y)
+
+        total = sum(y_counts.values())
+        entropy_val = 0.0
+
+        for (_, y_value), joint_freq in joint_counts.items():
+            p_xy = joint_freq / total
+            p_y = y_counts[y_value] / total
+
+            if p_xy < 1e-6 or p_y < 1e-6:
+                return -100
+            
+            entropy_val += p_xy * math.log(p_y/p_xy)
+
+        return entropy_val
+    
+
+    @staticmethod
+    def theils_u(x, y):
+        s_xy = MachineLearningHelp.conditional_entropy(x, y)
+        x_counts = Counter(x)
+
+        total = sum(x_counts.values())
+        p_x = [v / total for v in x_counts.values()]
+        s_x = ss.entropy(p_x)
+
+        return 1 if s_x == 0 else (s_x - s_xy) / s_x
+
+    
+    @staticmethod
+    def correlation_ratio(categories, vals):
+        categories = MachineLearningHelp.convert(categories, "array")
+        vals = MachineLearningHelp.convert(vals, "array")
+
+        cat_codes, _ =  pd.factorize(categories)
+        n_cats = np.max(cat_codes) + 1
+
+        means = np.zeros(n_cats)
+        counts = np.zeros(n_cats)
+
+        for i in range(n_cats):
+            valss = vals[cat_codes == i]
+            counts[i] = len(valss)
+            means[i] = np.mean(valss)
+        
+        global_means = np.sum(means * counts) / np.sum(counts)
+
+        num = np.sum(counts * (means - global_means)**2)
+        den = np.sum((vals - global_means) ** 2)
+
+        return 0.0 if num==0 else np.sqrt(num/den)
+    
+
+    @staticmethod
+    def compute_associations(df, col_a, col_b, nominal_cols, use_theil=False):
+        if col_a == col_b:
+            return 1.0, 1.0
+
+        a_is_cat = col_a in nominal_cols
+        b_is_cat = col_b in nominal_cols
+
+        if a_is_cat and b_is_cat:
+            if use_theil:
+                return (
+                    MachineLearningHelp.theils_u(df[col_a], df[col_b]),
+                    MachineLearningHelp.theils_u(df[col_b], df[col_a])
+                )
+            val = MachineLearningHelp.cramers_v(df[col_a], df[col_b])
+            return val, val
+        
+        if a_is_cat != b_is_cat:
+            cat_col, num_col = (col_a, col_b) if a_is_cat else (col_b, col_a)
+            valid = ~np.isnan(df[num_col])
+
+            val = MachineLearningHelp.correlation_ratio(
+                df.loc[valid, cat_col],
+                df.loc[valid, num_col]
+            )
+            return val, val
+        
+        x = df[col_a].to_numpy()
+        y = df[col_b].to_numpy()
+    
+        valid = ~np.isnan(x) & ~np.isnan(y)
+        corr, _ = ss.pearsonr(x[valid], y[valid])
+
+        return corr, corr
+    
+
+    @staticmethod
+    def associations(dataset, nominal_cols=None, mark_cols=False, theil_u=False, return_results=True,):
+        """
+        Calculate the correlation / strength-of-association between features in a dataset.
+        """
+
+        # ensure dataframe format
+        dataset = MachineLearningHelp.convert(dataset, "dataframe")
+        columns = dataset.columns
+
+        # handle nominal columns
+        if nominal_cols is None:
+            nominal_cols = []
+        elif nominal_cols == "all":
+            nominal_cols = columns
+
+        # initialize correlation matrix
+        corr = pd.DataFrame(index=columns, columns=columns)
+
+        # compute associations
+        for i, col_i in enumerate(columns):
+            for j in range(i, len(columns)):
+                col_j = columns[j]
+
+                if i == j:
+                    corr[col_i][col_j] = 1.0
+                else:
+                    val_1, val_2 = MachineLearningHelp.compute_associations(dataset, col_i, col_j, nominal_cols, theil_u,)
+                    corr[col_j][col_i] = val_1
+                    corr[col_i][col_j] = val_2
+
+        corr.fillna(value=np.nan, inplace=True)
+
+        # mark column types if requested
+        if mark_cols:
+            marked = [
+                f"{col} (nom)" if col in nominal_cols else f"{col} (con)"
+                for col in columns
+            ]
+            corr.columns = marked
+            corr.index = marked
+
+        if return_results:
+            return corr
 
  
