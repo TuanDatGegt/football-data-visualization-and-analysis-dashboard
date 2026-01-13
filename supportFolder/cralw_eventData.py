@@ -38,32 +38,37 @@ def inject_matchID(sql: str, matchID: int) -> str:
 
 
 
-def extract_and_save(engine, sql_filename: str, matchID: int, output_name: str):
+def extract_and_save(engine, sql_filename: str, matchID: int, output_name: str, saved: bool = True) -> pd.DataFrame:
     raw_sql = load_sql_file(sql_filename)
     sql = inject_matchID(raw_sql, matchID)
 
     df = pd.read_sql(sql, engine)
 
-    output_path = DATA_EXTRACTION_FOLDER / f"{output_name}_{matchID}.parquet"
-    df.to_parquet(output_path, index=False)
+    if saved:
+        output_path = DATA_EXTRACTION_FOLDER / f"{output_name}_{matchID}.parquet"
+        df.to_parquet(output_path, index=False)
 
-    print(f"Đã lưu thành công file: {output_path} ({len(df)} row)")
+        print(f"Đã lưu thành công file: {output_path} ({len(df)} row)")
+
     return df
 
 
 
-def crawl_matchEvent_data(matchID: int):
+def crawl_matchEvent_data(matchID: int, saved: bool=True):
     engine = get_engine()
 
-    print(f"\n Lấy thông tin dữ liệu cho trận đấu matchID = {matchID}")
+    if saved:
+        print(f"\n Lấy thông tin dữ liệu cho trận đấu matchID = {matchID}")
+        print("\n Thu thập thông tin từ CSDL hệ thống thành công.")
 
-    extract_and_save(engine, sql_filename="event_tracking.sql", matchID=matchID, output_name="event_tracking_raw")
+    extract_and_save(engine, sql_filename="event_tracking.sql", matchID=matchID, output_name="event_tracking_raw", saved=saved)
 
-    extract_and_save(engine, sql_filename="event_tags.sql", matchID=matchID, output_name="event_tags_raw")
+    extract_and_save(engine, sql_filename="event_tags.sql", matchID=matchID, output_name="event_tags_raw", saved=saved)
 
-    extract_and_save(engine, sql_filename="formation_timeline.sql", matchID=matchID, output_name="formation_timeline_raw")
+    extract_and_save(engine, sql_filename="formation_timeline.sql", matchID=matchID, output_name="formation_timeline_raw", saved=saved)
 
-    print("\n Thu thập thông tin từ CSDL hệ thống thành công.")
+    
+
 
 
 if __name__ == "__main__":
@@ -79,5 +84,6 @@ if __name__ == "__main__":
         "France - Croatia": 2058017 # Doi vo dich world cup 2018 Mbappé toa sang trong thi dau
     }
     """
-    crawl_matchEvent_data(MATCH_ID)
+
+    crawl_matchEvent_data(MATCH_ID,saved=False)
 
