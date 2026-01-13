@@ -26,11 +26,11 @@ def compute_classification_metrics(y_true, y_prob, threshold=0.5, model_name=Non
 
     for k, v in results.items():
         if k in percent_metrics:
-            print(f"{k:20s}: {v*100:6.2f}%")
+            print(f"{k:20s}: {v*100:6.5f}%")
         else:
             print(f"{k:20s}: {v:.5f}")
 
-    print(f"Threshold used      : {threshold:.2f}\n")
+    print(f"Threshold used      : {threshold:.5f}\n")
 
     return results
 
