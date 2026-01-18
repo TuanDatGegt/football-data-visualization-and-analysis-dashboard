@@ -2,6 +2,9 @@ import math
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import scipy.spatial
+
+from supportFolder.statical_eventTracking import number_pass_accurate
 #import scrip
 
 
@@ -215,6 +218,156 @@ class create_soccer_Pitch:
 
         return self.fig
     
-    
+    def prepare_pass_(self, df_events, df_stats, show_top_K_percent=None, view_90_minute=False):
+        
+        if df_stats["teamID"].nunique() > 1:
+            raise ValueError("Position plot should only contain 1 team")
+
+        team_id = df_stats["teamID"].unique()[0]
+
+        # GỌI HÀM BỔ TRỢ VỪA VIẾT Ở TRÊN
+        df_passes = number_pass_accurate(df_events, team_id)
+
+        # Lọc chỉ lấy những cầu thủ có trong df_stats
+        players = df_stats["playerID"].unique()
+        df_passes = df_passes[
+            df_passes["player1ID"].isin(players) & df_passes["player2ID"].isin(players)
+        ]
+
+        # Lấy centroid và minutesPlayed
+        df_centroid = df_stats[["playerID", "centroidX", "centroidY", "minutePlayed"]].copy()
+
+        # Merge tọa độ Player 1
+        df_pos_p1 = df_centroid.rename(columns={
+            "playerID": "player1ID", "centroidX": "centroidX1", 
+            "centroidY": "centroidY1", "minutePlayed": "minutePlayed1"
+        })
+        df_pass_share = pd.merge(df_passes, df_pos_p1, on="player1ID")
+
+        # Merge tọa độ Player 2
+        df_pos_p2 = df_centroid.rename(columns={
+            "playerID": "player2ID", "centroidX": "centroidX2", 
+            "centroidY": "centroidY2", "minutePlayed": "minutePlayed2"
+        })
+        df_pass_share = pd.merge(df_pass_share, df_pos_p2, on="player2ID")
+
+        # Tính toán view 90 phút
+        if view_90_minute:
+            min_mins = df_pass_share[["minutePlayed1", "minutePlayed2"]].min(axis=1)
+            # Tránh chia cho 0
+            df_pass_share["totalPasses"] = (df_pass_share["totalPasses"] / min_mins * 90).replace([np.inf, -np.inf], 0)
+
+        # Tính sharePasses để làm độ dày đường kẻ (width)
+        max_passes = df_pass_share["totalPasses"].max()
+        if max_passes > 0:
+            df_pass_share["sharePasses"] = df_pass_share["totalPasses"] / max_passes
+        else:
+            df_pass_share["sharePasses"] = 0
+
+        # Lọc Top K%
+        if show_top_K_percent is not None:
+            df_pass_share = df_pass_share.sort_values("totalPasses", ascending=False)
+            df_pass_share["cumShare"] = df_pass_share["totalPasses"].cumsum() / df_pass_share["totalPasses"].sum()
+            df_pass_share = df_pass_share[df_pass_share["cumShare"] <= show_top_K_percent / 100].copy()
+
+        return df_pass_share
+
+    def add_position_plot(self, df_stats, title=None, dict_info=None, colour_kpi=None,
+                          colour_scale=None, df_passes=None, convex_hull=False):
+        
+        df_stats = df_stats.copy()
+        df_stats["centroidY"] = self.width - df_stats["centroidY"]
+
+        if convex_hull:
+            field_player = df_stats[df_stats["playerPosition"] != "Goalkeeper"]
+            if len(field_player) >= 3:
+                centroids = field_player[["centroidX", "centroidY"]].to_numpy()
+                hull = scipy.spatial.ConvexHull(centroids)
+                convex_x = centroids[hull.vertices, 0]
+                convex_y = centroids[hull.vertices, 1]
+
+                convex_x = np.append(convex_x, convex_x[0])
+                convex_y = np.append(convex_y, convex_y[0])
+
+                self.fig.add_trace(go.Scatter(
+                    x=convex_x, y=convex_y, fill="toself", mode="lines",
+                    fillcolor="rgba(255, 255, 255, 0.1)",
+                    line=dict(color=self.theme['lines'], width=1, dash='dot'),
+                    showlegend=False, name="Convex Hull"
+                ))
+
+        if df_passes is not None:
+            df_pass = df_passes.copy()
+            df_pass["centroidY1"] = self.width - df_pass["centroidY1"]
+            df_pass["centroidY2"] = self.width - df_pass["centroidY2"]
+
+            for _, row in df_pass.iterrows():
+                self.fig.add_trace(go.Scatter(
+                    x=[row["centroidX1"], row["centroidX2"]],
+                    y=[row["centroidY1"], row["centroidY2"]],
+                    mode="lines", showlegend=False,
+                    line=dict(color="#FFD700", width=row.get("sharePasses", 1)*20),
+                    opacity=0.3
+                ))
+
+        marker_color = df_stats[colour_kpi] if colour_kpi is not None else "red"
+        self.fig.add_trace(go.Scatter(
+            x=df_stats["centroidX"],
+            y=df_stats["centroidY"],
+            mode="markers+text",
+            text=df_stats["playerName"],
+            textposition="bottom center",
+            name="Players",
+            marker=dict(
+                color=marker_color, 
+                size=12, 
+                colorscale="Reds" if colour_kpi else None,
+                showscale=True if colour_kpi else False,
+                line=dict(width=1, color="white")
+            )
+        ))
+
+        # 4. Xử lý Hover Information
+        default_dict = {
+            "Player name": {"values": "playerName"},
+            "Minutes played": {"values": "minutePlayed", "display_type": ".0f"},
+            "Total passes": {"values": "totalPasses", "display_type": ".0f"},
+            "Total passes/90": {"values": "totalPasses90", "display_type": ".0f"},
+            "Accurate passes (%)": {"values": "shareAccuratePasses", "display_type": ".1f"},
+            "Total shots": {"values": "totalShots", "display_type": ".0f"},
+            "Total goals": {"values": "totalGoals", "display_type": ".0f"},
+        }
+        
+        target_info = dict_info if dict_info is not None else default_dict
+        hover_list = []
+        for _, row in df_stats.iterrows():
+            text = ""
+            for label, info in target_info.items():
+                col = info["values"]
+                if col in row:
+                    val = row[col]
+                    if pd.isna(val):
+                        text += f"{label}: N/A<br />"
+                    elif "display_type" in info:
+                        # Sử dụng format từ code mẫu của bạn
+                        text += "{}: {:^{display_type}}<br />".format(label, val, display_type=info["display_type"])
+                    else:
+                        text += f"{label}: {val}<br />"
+            hover_list.append(text)
+        
+        self.fig.data[-1].hovertemplate = hover_list
+
+        if colour_kpi:
+            legend_name = next((k for k, v in target_info.items() if v["values"] == colour_kpi), colour_kpi)
+            self.fig.add_annotation(
+                x=1.12, y=1.05, text=legend_name, showarrow=False,
+                xref="paper", yref="paper", font=dict(color="white")
+            )
+
+        if title:
+            self.fig.update_layout(title=dict(text=title, x=0.5, y=0.95, xanchor="center"))
+        
+        return self.fig
+
     def show(self):
         self.fig.show()
