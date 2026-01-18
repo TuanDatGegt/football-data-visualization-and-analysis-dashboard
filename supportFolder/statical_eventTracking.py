@@ -311,6 +311,29 @@ def event_to_ball_frames(row, fps=25):
     return [{"xPos": x, "yPos": y} for x, y in zip(xs, ys)]
 
 
+def infer_target_player(row, next_row):
+    """
+    Infer receiver / shooter / next actor
+    """
+    if next_row is None:
+        return None
+
+    if (
+        row["teamID"] == next_row["teamID"] and
+        next_row["eventSec"] - row["eventSec"] <= 3 and
+        valid_pos(next_row["posBeforeXMeters"], next_row["posBeforeYMeters"])
+    ):
+        return {
+            "playerID": next_row["playerID"],
+            "playerName": next_row.get("playerName"),
+            "team": "Home" if next_row["teamID"] == next_row["homeTeamID"] else "Away",
+            "xPos": next_row["posBeforeXMeters"],
+            "yPos": next_row["posBeforeYMeters"]
+        }
+
+    return None
+
+
 def mean_position_player(df_events):
     df = df_events[
         df_events["posBeforeXMeters"].notna() &
@@ -332,91 +355,67 @@ def mean_position_player(df_events):
 
 def build_event_tracking(df_events: pd.DataFrame, event_ids, fps: int = 25):
     """
-    Build clean event-based tracking data
-    - STATIC players: fixed per phase
-    - DYNAMIC player: event owner
-    - BALL: inferred trajectory (safe for Wyscout)
+    Event-based pseudo tracking
+    - PLAYER_OWNER  : event owner
+    - PLAYER_TARGET : receiver / shooter
+    - BALL          : inferred trajectory
     """
 
     frames = []
     global_frame = 0
 
-    # ==========================
-    # 1. FILTER & SORT EVENTS
-    # ==========================
     df_phase = (
         df_events[df_events["ID"].isin(event_ids)]
         .sort_values("eventSec")
-        .copy()
+        .reset_index(drop=True)
     )
 
     if df_phase.empty:
         return pd.DataFrame(frames)
 
-    # ==========================
-    # 2. STATIC PLAYERS (CACHE)
-    # ==========================
-    static_players = mean_position_player(df_events)
-
-    static_records = []
-    for _, p in static_players.iterrows():
-        static_records.append({
-            "entityType": "PLAYER_STATIC",
-            "playerID": p["playerID"],
-            "team": p["team"],
-            "xPos": p["centroidX"],
-            "yPos": p["centroidY"]
-        })
-
-    # ==========================
-    # 3. LOOP EVENTS
-    # ==========================
-    for _, row in df_phase.iterrows():
+    for i, row in df_phase.iterrows():
+        next_row = df_phase.iloc[i + 1] if i + 1 < len(df_phase) else None
 
         x0, y0 = row["posBeforeXMeters"], row["posBeforeYMeters"]
         if not valid_pos(x0, y0):
             continue
 
-        team_label = (
-            "Home" if row["teamID"] == row["homeTeamID"] else "Away"
-        )
+        team_label = "Home" if row["teamID"] == row["homeTeamID"] else "Away"
 
-        # ---- BALL TRAJECTORY
         ball_frames = event_to_ball_frames(row, fps=fps)
-        if len(ball_frames) == 0:
+        if not ball_frames:
             continue
 
-        # ==========================
-        # 4. LOOP FRAMES
-        # ==========================
+        target_player = infer_target_player(row, next_row)
+
         for b in ball_frames:
 
-            # ---- STATIC PLAYERS (COPY)
-            for sp in static_records:
-                frames.append({
-                    "frame": global_frame,
-                    **sp
-                })
-
-            # ---- DYNAMIC PLAYER
+            # ---- OWNER
             frames.append({
                 "frame": global_frame,
-                "entityType": "PLAYER_DYNAMIC",
+                "entityType": "PLAYER_OWNER",
                 "playerID": row["playerID"],
                 "playerName": row.get("playerName"),
                 "team": team_label,
                 "xPos": x0,
                 "yPos": y0,
                 "eventID": row["ID"],
-                "eventName": row["eventName"],
-                "subEventName": row.get("subEventName")
+                "eventName": row["eventName"]
             })
 
-            # ---- BALL (TOP LAYER)
+            # ---- TARGET
+            if target_player:
+                frames.append({
+                    "frame": global_frame,
+                    "entityType": "PLAYER_TARGET",
+                    **target_player,
+                    "eventID": row["ID"]
+                })
+
+            # ---- BALL
             frames.append({
                 "frame": global_frame,
                 "entityType": "BALL",
-                "playerID": "BALL",
                 "team": "Ball",
                 "xPos": b["xPos"],
                 "yPos": b["yPos"],
