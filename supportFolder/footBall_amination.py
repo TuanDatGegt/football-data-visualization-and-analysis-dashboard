@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 from supportFolder.plot_pitch import create_soccer_Pitch
 
@@ -19,78 +18,20 @@ TEAM_COLOURS = {
 # ===============================
 class FootballAnimator:
     """
-    Event-based pseudo tracking animation for WyScout data
+    Event-based pseudo tracking animation (OWNER / TARGET / BALL)
     """
 
     def __init__(self, event_data: pd.DataFrame, speed: float = 1.0):
         self.df = event_data.copy()
         self.speed = speed
 
-        # validate minimal columns
-        required_cols = {"frame", "xPos", "yPos", "team"}
+        required_cols = {"frame", "xPos", "yPos", "team", "entityType"}
         missing = required_cols - set(self.df.columns)
         if missing:
-            raise ValueError(f"Missing columns for animation: {missing}")
+            raise ValueError(f"Missing columns: {missing}")
 
         self.df.sort_values("frame", inplace=True)
         self.df.reset_index(drop=True, inplace=True)
-
-    # ===============================
-    # CORE LOGIC
-    # ===============================
-    def _interpolate_position(self, row, frame):
-        """
-        Linear interpolation between start and end position
-        """
-        total = max(1, row["endFrame"] - row["startFrame"])
-        alpha = (frame - row["startFrame"]) / total
-
-        x = row["posBeforeXMeters"] + alpha * (
-            row["posAfterXMeters"] - row["posBeforeXMeters"]
-        )
-        y = row["posBeforeYMeters"] + alpha * (
-            row["posAfterYMeters"] - row["posBeforeYMeters"]
-        )
-        return x, y
-
-    def _draw_actor(self, x, y, row):
-        """
-        Player currently involved in event
-        """
-        return go.Scatter(
-            x=[x],
-            y=[y],
-            mode="markers+text",
-            marker=dict(
-                size=14,
-                color=TEAM_COLOURS.get(row["Team"], "gray"),
-                line=dict(width=2, color="white")
-            ),
-            text=[row["playerName"]],
-            textposition="top center",
-            name="Player",
-            hoverinfo="skip"
-        )
-
-    def _draw_ball(self, x, y):
-        return go.Scatter(
-            x=[x],
-            y=[y],
-            mode="markers",
-            marker=dict(size=8, color="black"),
-            name="Ball",
-            hoverinfo="skip"
-        )
-
-    def _draw_path(self, row):
-        return go.Scatter(
-            x=[row["posBeforeXMeters"], row["posAfterXMeters"]],
-            y=[row["posBeforeYMeters"], row["posAfterYMeters"]],
-            mode="lines",
-            line=dict(color="rgba(255,255,255,0.4)", dash="dash"),
-            name="Trajectory",
-            hoverinfo="skip"
-        )
 
     # ===============================
     # BUILD ANIMATION
@@ -102,49 +43,54 @@ class FootballAnimator:
         frames = []
         slider_steps = []
 
-        # frame-level dataframe
         for frame_id, fdf in self.df.groupby("frame"):
             traces = []
-            static_players = fdf[fdf["entityType"] == "PLAYER_STATIC"]
-
-            for _, row in static_players.iterrows():
-                traces.append(go.Scatter(
-                    x=[row["xPos"]],
-                    y=[row["yPos"]],
-                    mode="markers",
-                    marker=dict(
-                        size=10,
-                        color=TEAM_COLOURS.get(row["team"], "gray"),
-                        opacity=0.6,
-                        line=dict(width=1, color="white")
-                    ),
-                    hoverinfo="skip",
-                    name="Player"
-                ))
 
             # ==========================
-            # 1. DRAW PLAYER WITH BALL
+            # PLAYER OWNER
             # ==========================
-            players = fdf[fdf["entityType"] == "PLAYER_BALL"]
+            owners = fdf[fdf["entityType"] == "PLAYER_OWNER"]
 
-            for _, row in players.iterrows():
+            for _, row in owners.iterrows():
                 traces.append(go.Scatter(
                     x=[row["xPos"]],
                     y=[row["yPos"]],
                     mode="markers+text",
                     marker=dict(
-                       size=14,
-                       color=TEAM_COLOURS.get(row["team"], "gray"),
+                        size=16,
+                        color=TEAM_COLOURS.get(row["team"], "gray"),
+                        line=dict(width=3, color="white")
+                    ),
+                    text=[row.get("playerName", "")],
+                    textposition="top center",
+                    hoverinfo="skip",
+                    name="Owner"
+                ))
+
+            # ==========================
+            # PLAYER TARGET
+            # ==========================
+            targets = fdf[fdf["entityType"] == "PLAYER_TARGET"]
+
+            for _, row in targets.iterrows():
+                traces.append(go.Scatter(
+                    x=[row["xPos"]],
+                    y=[row["yPos"]],
+                    mode="markers+text",
+                    marker=dict(
+                        size=13,
+                        color=TEAM_COLOURS.get(row["team"], "gray"),
+                        opacity=0.6,
                         line=dict(width=2, color="white")
                     ),
                     text=[row.get("playerName", "")],
                     textposition="top center",
                     hoverinfo="skip",
-                    name="Player"
+                    name="Target"
                 ))
 
             # ==========================
-            # 2. DRAW BALL (ALWAYS ON TOP)
+            # BALL (TOP LAYER)
             # ==========================
             balls = fdf[fdf["entityType"] == "BALL"]
 
@@ -155,7 +101,7 @@ class FootballAnimator:
                     mode="markers",
                     marker=dict(
                         size=8,
-                        color=TEAM_COLOURS.get("Ball", "black"),
+                        color=TEAM_COLOURS["Ball"],
                         line=dict(width=1, color="white")
                     ),
                     hoverinfo="skip",
@@ -172,7 +118,7 @@ class FootballAnimator:
 
         fig.frames = frames
 
-        # initial frame
+        # Initial frame
         if frames:
             fig.add_traces(frames[0].data)
 
