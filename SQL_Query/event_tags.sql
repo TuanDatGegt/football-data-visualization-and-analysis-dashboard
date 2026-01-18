@@ -18,8 +18,9 @@ SELECT
 
     -- Team & Player
     t.teamName,
-    CONCAT(p.Fname, ' ', p.Lname) AS playerName,
-
+    p.Sname AS playerName,
+    p.playerID,
+    
     -- Tag info
     tg.tagID,
     tg.Description

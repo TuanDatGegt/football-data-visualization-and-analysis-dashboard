@@ -12,7 +12,7 @@ SELECT
 
     -- Player
     f.playerID,
-    CONCAT(p.Fname, ' ', p.Lname) AS playerName,
+    p.Sname AS playerName,
     p.Prole AS playerRole,
 
     -- Lineup & substitution

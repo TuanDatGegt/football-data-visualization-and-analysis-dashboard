@@ -25,7 +25,7 @@ SELECT
 
     -- Player
     p.playerID,
-    CONCAT(p.Fname, ' ', p.Lname) AS playerName,
+    p.Sname AS playerName,
     p.Prole AS playerPosition,
 
     -- Spatial data (tracking core)
