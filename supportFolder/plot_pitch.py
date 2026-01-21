@@ -12,9 +12,11 @@ class create_soccer_Pitch:
     """
     Module support for soccer visualize 
     """
-    def __init__(self, len_field = 105, wid_field = 68, theme = "tactical"):
+    def __init__(self, len_field = 105, wid_field = 68, theme = "tactical", view = "full", attacking_direction="right"):
         self.length = len_field
         self.width = wid_field
+        self.view = view
+        self.direction = attacking_direction
 
         themes = {
             "tactical": {"pitch": "#121212", "line": "#FFFFFF", "goal": "#ffffff", "heatmap": "Viridis"},
@@ -23,6 +25,10 @@ class create_soccer_Pitch:
         }
         self.theme = themes.get(theme, themes["tactical"])
         self.fig = self._create_empty_pitch()
+        if self.view == "half":
+            self.fig = self.create_empty_halfPitch()
+        else:
+            self.fig = self._create_empty_pitch()
 
 
     def _create_arc(self, x_center, y_center, radius, start_angle, end_angle):
@@ -76,6 +82,134 @@ class create_soccer_Pitch:
 
         return fig
     
+
+    def create_empty_halfPitch(self):
+        """
+        Draw HALF soccer pitch (attacking half)
+        Used for xG / shot heatmap / outlier heatmap
+        """
+
+        fig = go.Figure()
+
+        # =========================
+        # X RANGE (HALF PITCH)
+        # =========================
+        if self.direction == "right":
+            x_range = [self.length / 2, self.length + 5]
+            x_start = self.length / 2
+            goal_x = self.length
+            penalty_x = self.length - 16.5
+            six_yard_x = self.length - 5.5
+            penalty_spot_x = self.length - 11
+            arc_center_x = penalty_spot_x
+            arc_angles = (127, 233)
+        else:
+            x_range = [-5, self.length / 2]
+            x_start = 0
+            goal_x = 0
+            penalty_x = 16.5
+            six_yard_x = 5.5
+            penalty_spot_x = 11
+            arc_center_x = penalty_spot_x
+            arc_angles = (-53, 53)
+
+        fig.update_layout(
+            plot_bgcolor=self.theme["pitch"],
+            paper_bgcolor=self.theme["pitch"],
+            xaxis=dict(
+                range=x_range,
+                showgrid=False,
+                zeroline=False,
+                visible=False
+            ),
+            yaxis=dict(
+                range=[-5, self.width + 5],
+                showgrid=False,
+                zeroline=False,
+                visible=False,
+                scaleanchor="x",
+                scaleratio=1
+            ),
+            margin=dict(l=10, r=10, t=10, b=10),
+            autosize=True,
+            width=None,      # 👈 nhỏ gọn cho Dash
+            height=None,
+            showlegend=False
+        )
+
+        line_style = dict(color=self.theme["line"], width=1.5)
+
+        shapes = [
+            # Half boundary
+            dict(type="line", x0=x_start, y0=0, x1=x_start, y1=self.width, line=line_style),
+
+            # Penalty area
+            dict(
+                type="rect",
+                x0=penalty_x,
+                y0=(self.width - 40.3) / 2,
+                x1=goal_x,
+                y1=(self.width + 40.3) / 2,
+                line=line_style
+            ),
+
+            # Six-yard box
+            dict(
+                type="rect",
+                x0=six_yard_x,
+                y0=(self.width - 18.3) / 2,
+                x1=goal_x,
+                y1=(self.width + 18.3) / 2,
+                line=line_style
+            ),
+
+            # Goal
+            dict(
+                type="rect",
+                x0=goal_x,
+                y0=(self.width - 7.32) / 2,
+                x1=goal_x + (1.5 if self.direction == "right" else -1.5),
+                y1=(self.width + 7.32) / 2,
+                line=dict(color=self.theme["goal"], width=2)
+            )
+        ]
+
+        fig.update_layout(shapes=shapes)
+
+        # =========================
+        # PENALTY SPOT
+        # =========================
+        fig.add_trace(go.Scatter(
+            x=[penalty_spot_x],
+            y=[self.width / 2],
+            mode="markers",
+            marker=dict(color=self.theme["line"], size=8),
+            hoverinfo="skip"
+        ))
+
+        # =========================
+        # PENALTY ARC (D)
+        # =========================
+        arc_x, arc_y = self._create_arc(
+            arc_center_x,
+            self.width / 2,
+            9.15,
+            arc_angles[0],
+            arc_angles[1]
+        )
+
+        fig.add_trace(go.Scatter(
+            x=arc_x,
+            y=arc_y,
+            mode="lines",
+            line=line_style,
+            hoverinfo="skip"
+        ))
+
+        return fig
+
+
+
 
     def _build_grid(self, min_value, max_value, nb_buckets):
         edges = np.linspace(min_value, max_value, nb_buckets + 1)
