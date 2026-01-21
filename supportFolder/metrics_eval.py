@@ -1,8 +1,9 @@
 import numpy as np
 from sklearn import metrics
 import plotly.graph_objects as go
+from supportFolder.heatmap_xG import compute_calibration_data   # hoặc cùng file
 
-def compute_classification_metrics(y_true, y_prob, threshold=0.5, model_name=None):
+def compute_classification_metrics(y_true, y_prob, threshold=0.104, model_name=None):
     """
     Compute and print classification metrics.
     """
@@ -68,4 +69,78 @@ def plot_mertrics_comparison(metrics_dict, metric_name):
 
     return fig
 
+
+
+def build_xg_calibration_figure(
+    df,
+    models=("lr", "rf", "svm")
+):
+    fig = go.Figure()
+
+    MODEL_CONFIG = {
+        "lr": {
+            "col": "prediction_lr",
+            "label": "Logistic Regression"
+        },
+        "rf": {
+            "col": "prediction_rf",
+            "label": "Random Forest"
+        },
+        "svm": {
+            "col": "prediction_svm",
+            "label": "SVM (RBF)"
+        }
+    }
+
+    for m in models:
+        if m not in MODEL_CONFIG:
+            continue
+
+        cfg = MODEL_CONFIG[m]
+        calib_df = compute_calibration_data(df, cfg["col"])
+
+        fig.add_trace(
+            go.Scatter(
+                x=calib_df["mean_predicted_prob"],
+                y=calib_df["observed_goal_rate"],
+                mode="lines+markers",
+                name=cfg["label"]
+            )
+        )
+
+    # Perfect calibration line
+    fig.add_trace(
+        go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode="lines",
+            name="Perfect calibration",
+            line=dict(dash="dash", color="gray"),
+            showlegend=True
+        )
+    )
+
+    fig.update_layout(
+        title="xG Calibration Curves",
+        xaxis_title="Predicted probability (xG)",
+        yaxis_title="Observed goal frequency",
+
+        legend=dict(
+            orientation="h",      # 👈 legend nằm ngang
+            yanchor="top",
+            y=-0.25,               # 👈 hạ xuống dưới plot
+            xanchor="center",
+            x=0.5
+        ),
+
+        margin=dict(
+            t=60,
+            b=90                  # 👈 chừa không gian cho legend
+        ),
+
+        template="plotly_white"
+    )
+
+
+    return fig
 
