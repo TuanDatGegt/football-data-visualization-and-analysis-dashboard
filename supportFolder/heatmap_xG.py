@@ -255,7 +255,7 @@ def compute_calibration_data(
 
     calib = (
         df_tmp
-        .groupby("bin")
+        .groupby("bin", observed=False)
         .agg(
             mean_predicted_prob=(prob_col, "mean"),
             observed_goal_rate=(target_col, "mean"),
