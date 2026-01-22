@@ -26,8 +26,17 @@ def compute_totalShot(df_events, group_cols):
     return df_shots.groupby(group_cols).agg(totalShots = ("ID", "size")).reset_index()
 
 def compute_totalGoals(df_events, group_cols):
-    df_goals = df_events[df_events["eventName"].isin(["Shot", "Free Kick"])]
-    return df_goals.groupby(group_cols).agg(totalGoals= ("Goal", "sum")).reset_index()
+    df_goals = df_events[
+        (df_events["eventName"] == "Shot") &
+        (df_events["Goal"] == 1)
+    ]
+
+    return (
+        df_goals
+        .groupby(group_cols)
+        .size()
+        .reset_index(name="totalGoals")
+    )
 
 def compute_own_goals(df_events, group_cols):
     df_ownGoal = df_events[df_events["ownGoal"] == 1].copy()
