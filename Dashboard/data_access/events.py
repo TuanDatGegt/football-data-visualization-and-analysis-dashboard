@@ -25,6 +25,30 @@ def load_event_data(
 
     return df_events
 
+
+def load_event_data_kpis(matchID: int = 2500045) -> pd.DataFrame:
+    """
+    Load event data for ONE match
+    Used by:
+    - overview_data.py
+    - xG tab
+    - shots map
+    """
+
+    file_path = DATA_TRANSFORM_DIR / f"events_transformed_{matchID}.parquet"
+
+    if not file_path.exists():
+        return pd.DataFrame()
+
+    df = pd.read_parquet(file_path)
+
+    # safety check
+    if df["matchID"].nunique() > 1:
+        raise ValueError("Event file contains multiple matchID")
+
+    return df
+
+
 def load_xg_data(split="train"):
     """
     Load xG model data
@@ -39,15 +63,22 @@ def load_xg_data(split="train"):
 
     return pd.read_parquet(path)
 
-"""
-def load_video_event_data(match_id: int):
-    #Load event data used for video tracking / phases
-    file_name = f"events_transformed_{match_id}.parquet"
-    path = DATA_TRANSFORM_DIR / file_name
 
-    if not path.exists():
-        raise FileNotFoundError(f"{file_name} not found")
 
-    return pd.read_parquet(path)
-"""
 
+def list_video_phases(match_id: int):
+    """
+    Return available phase IDs for a match
+    """
+    if not VIDEO_DIR.exists():
+        return []
+
+    phases = []
+    for p in VIDEO_DIR.glob(f"video_{match_id}_phase*.mp4"):
+        try:
+            phase_id = int(p.stem.split("phase")[-1])
+            phases.append(phase_id)
+        except ValueError:
+            continue
+
+    return sorted(phases)
