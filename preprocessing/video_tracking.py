@@ -24,15 +24,21 @@ from supportFolder.cralw_eventData import crawl_matchEvent_data
 
 #--------------------------------
 #Tag mapping for toPlayer
+GOAL_TAG = 101
+OWN_GOAL_TAG = 102
+ASSIST_TAG = 301
+KEY_PASS_TAG = 302
+ACCURATE_TAG = 1801
+NOT_ACCURATE_TAG = 1802
 
-ASSIST_TAG = [301]
-OWN_GOAL_TAG = [102]
-KEY_PASS_TAG = [302]
+#frame per seconds
+FPS = 25
+FIELD_LENGTH = 105
+FIELD_WIDTH = 68
 
-def crawl_raw_data(game: int, save: bool = True):
 
-    crawl_matchEvent_data(matchID=game, saved=save)
-
+#--------------------------------
+#load file
 def load_raw_parquet(game: int):
     
     df_event_raw = pd.read_parquet(DATA_EXTRACTION_FOLDER / f"event_tracking_raw_{game}.parquet")
@@ -44,7 +50,6 @@ def load_raw_parquet(game: int):
 
 #--------------------------------
 # Mapping hometeam and awayteam
-
 def map_home_away_teams(df_events_raw: pd.DataFrame):
 
     home_team_id = df_events_raw[df_events_raw["side"] == "home"]['teamID'].unique()[0]
@@ -54,24 +59,24 @@ def map_home_away_teams(df_events_raw: pd.DataFrame):
 
 
 #--------------------------------
-def map_to_player(df_events: pd.DataFrame, df_tags: pd.DataFrame):
+def mapping_tags_to_mertrics(df_events: pd.DataFrame, df_tags: pd.DataFrame):
+    """
+    Lấy tag từ fỉle event_tags ánh xạ qua file event_tracking
+    """
+    goal_ids = set(df_tags[df_tags["tagID"] == GOAL_TAG]['eventRecordID'])
+    own_goal_ids = set(df_tags[df_tags["tagID"] == OWN_GOAL_TAG]['eventRecordID'])
+    accurate_ids = set(df_tags[df_tags["tagID"] == ACCURATE_TAG]['eventRecordID'])
+    not_accurate_ids = set(df_tags[df_tags["tagID"] == NOT_ACCURATE_TAG]['eventRecordID'])
 
-    df_events = df_events.copy()
-    df_tags = df_tags[["eventRecordID", "tagID", "playerID", "playerName"]]
+    df_events["Goal"] = df_events["eventRecordID"].apply(lambda x: 1 if x in goal_ids else 0)
+    df_events["ownGoal"] = df_events["eventRecordID"].apply(lambda x: 1 if x in own_goal_ids else 0)
 
-    df_events = df_events.merge(df_tags, on="eventRecordID", how="left", suffixes=("", "_tag"))
-
-    df_events['toPlayerID'] = np.nan
-    df_events["toPLayerName"] = np.nan
-
-    def assign_toPlayer(row):
-        if row["tagID"] in ASSIST_TAG + KEY_PASS_TAG + OWN_GOAL_TAG:
-            return row["playerID"], row["playerName"]
-        return row["toPlayerID"], row["toPlayerName"]
+    def check_accurate(event_id):
+        if event_id in accurate_ids: return 1
+        if event_id in not_accurate_ids: return 0
+        return 1
     
-    df_events[["toPlayerID", "toPlayerName"]] = df_events.apply(assign_toPlayer, axis=1, result_type="expand")
-
-    df_events = df_events.drop(columns=['tagID', 'playerID', 'playerName'])
+    df_events ["accurate"] = df_events["eventRecordID"].apply(check_accurate)
 
     return df_events
 
@@ -80,27 +85,54 @@ def map_to_player(df_events: pd.DataFrame, df_tags: pd.DataFrame):
 def preprocessing_events(df_events_raw: pd.DataFrame, df_tags: pd.DataFrame):
 
     df_events = df_events_raw.copy()
-
-    home_teamID, away_teamID = map_home_away_teams(df_events_raw)
-    df_events["homeTeamID"] = home_teamID
-    df_events["awayTeamID"] = away_teamID
-
-    df_events["goal"] = 0
-    df_events["ownGoal"] = 0
-    df_events["accurate"] = 1
-
-    df_events = map_to_player(df_events, df_tags)
-
-    df_events.loc[df_events['toPlayerID'].notnull() & df_events['toPlayerID'].isin(OWN_GOAL_TAG), "ownGoal"] = 1
-
-    field_LENGTH, field_WIDTH = 105, 68
-
-    df_events["posBeforeXMeters"] = df_events['posOrigX'] * field_LENGTH / 100
-    df_events["posBeforeYMeters"] = df_events['posOrigY'] * field_WIDTH / 100
-    df_events["posAfterXMeters"] = df_events['posDestX'] * field_LENGTH / 100
-    df_events["posAfterYMeters"] = df_events['posDestY'] * field_WIDTH / 100
     
-    return df_events
+    homeTeamID, awayTeamID = map_home_away_teams(df_events_raw)
+    df_events["homeTeamID"] = homeTeamID
+    df_events["awayTeamID"] = awayTeamID
+
+    df_events = mapping_tags_to_mertrics(df_events, df_tags)
+
+    df_events["posBeforeXMeters"] = df_events["posOrigX"] * FIELD_LENGTH / 100
+    df_events["posBeforeYMeters"] = df_events["posOrigY"] * FIELD_WIDTH / 100
+    df_events["posAfterXMeters"] = df_events["posDestX"] * FIELD_LENGTH / 100
+    df_events["posAfterYMeters"] = df_events["posDestY"] * FIELD_WIDTH / 100
+
+    df_events["eventSecEnd"] = df_events.groupby("matchPeriod")['eventSec'].shift(-1)
+
+    df_events["toPlayerID"] = df_events.groupby("matchPeriod")["playerID"].shift(-1)
+    df_events["toPlayerName"] = df_events.groupby("matchPeriod")["playerName"].shift(-1)
+    
+    maxGap = 5.0
+    maskGap = (df_events["eventSecEnd"] - df_events["eventSec"]) > maxGap
+    df_events.loc[maskGap, "eventSecEnd"] = df_events.loc[maskGap, "eventSec"] + 1.2
+
+    df_events["eventSecEnd"] = df_events["eventSecEnd"].fillna(df_events["eventSec"] + 1.0)
+
+    df_events["startFrame"] = (df_events["eventSec"] * FPS).astype(int)
+    df_events["endFrame"] = (df_events["eventSecEnd"] * FPS).astype(int)
+
+    maskInvalid = df_events["startFrame"] >= df_events["endFrame"]
+    df_events.loc[maskInvalid, "endFrame"] = df_events.loc[maskInvalid, "startFrame"] + 1
+
+    df_events["Team"] = df_events["side"].str.capitalize()
+
+    cols_rename = {
+        'eventRecordID': 'ID',
+        'playerRole': 'playerPosition'
+    }
+
+    df_final = df_events.rename(columns=cols_rename)
+
+    final_columns = ['ID', 'matchID', 'matchPeriod', 'eventSec', 'eventSecEnd', 
+        'startFrame', 'endFrame', 'eventName', 'subEventName', 
+        'teamID', 'Team', 'posBeforeXMeters', 'posBeforeYMeters', 
+        'posAfterXMeters', 'posAfterYMeters', 'playerID', 'playerName', 
+        'playerPosition', 'toPlayerID', 'toPlayerName', 'homeTeamID', 
+        'awayTeamID', 'accurate', 'Goal', 'ownGoal']
+
+    existing_cols = [c for c in final_columns if c in df_final.columns]
+
+    return df_final[existing_cols]
 
 
 #--------------------------------
@@ -110,10 +142,9 @@ def save_transformed_file(df_events: pd.DataFrame, df_formation: pd.DataFrame, g
 
 
 #--------------------------------
-def read_metrica_event_data(game: int, save: bool = True):
-    
-    # 1.Crawl
-    crawl_raw_data(game, saved=save)
+def read_metrica_event_data(game: int, saved: bool = True):
+
+    print(f"\n____Xử lý dữ liệu trận: {game}___")
 
     # 2.Load
     df_event_raw, df_tags_raw, df_formation= load_raw_parquet(game)
@@ -130,9 +161,36 @@ def read_metrica_event_data(game: int, save: bool = True):
 #--------------------------------
 if __name__ == "__main__":
     GAME_ID = 2500045
-    df_events, df_formations = read_metrica_event_data(GAME_ID)
-    print(df_events.head)
-    print(df_formations.head())  
+    df_ev, df_form = read_metrica_event_data(GAME_ID)
+    
+    # Kiểm tra thử 10 dòng đầu
+    print("\n[Preview Data]")
+    print(df_ev[['Team', 'eventName', 'eventSec', 'eventSecEnd', 'startFrame', 'endFrame', 'toPlayerID']].head(10))
 #--------------------------------
 #--------------------------------
 #--------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+    dicts = dict{
+        "Manchester City - Manchester United": 2500045, #England (ngau nhien)
+        "Portugal - France": 1694440, #European Champion League (National) (vô dich giai dau)
+        "Monaco - Olympique Lyonnais": 2500920, #Ligue 1 (France) (duoc danh gia tot nhung lai da kem)
+        "Bayern Mucnchen - Stuttgart": 2517036, #Germany (doi bong noi tieng)
+        "SPAL - Sampdoria": 2576337, #Germany (da tot mua giai khi bi danh gia kem)
+        "Barcelona - Real Madrid": 2565907, #Spain Doi thi dau giu duoc thu hang tot nhat
+        "France - Croatia": 2058017 # Doi vo dich world cup 2018 Mbappé toa sang trong thi dau
+"""
