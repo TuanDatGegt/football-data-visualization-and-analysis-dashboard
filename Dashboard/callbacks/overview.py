@@ -1,66 +1,45 @@
 from dash import Input, Output, callback
 import plotly.graph_objects as go
 
-from data_access.events import load_event_data, load_xg_data
-from supportFolder.heatmap_xG import build_goal_probability_heatmap, filter_outlier_shots_and_plot_heatmap
-from supportFolder.metrics_eval import build_xg_calibration_figure
+from Dashboard.data_access.events import load_event_data_kpis
+from supportFolder.overview_data import build_overview_team_kpis
 
 
-
-# =========================
-# GOAL PROBABILITY HEATMAP
-# =========================
 @callback(
-    Output("goal-probability-heatmap-raw", "figure"),
-    Input("url", "pathname"),
+    Output("shots_kpi", "children"),
+    Output("passes_kpi", "children"),
+    Output("accuracy_kpi", "children"),
+    Output("mean_pass_length_kpi", "children"),
+    Output("duels_kpi", "children"),
+    Output("goals_kpi", "children"),
+    Input("match-dropdown", "value"),
+    Input("team-radio", "value"),   # 'home' | 'away'
 )
-def update_goal_probability_heatmap(_):
+def update_team_kpis(match_id, team_side):
 
-    df_shots = load_event_data(shots_only=True)
+    if not match_id or not team_side:
+        return ["–"] * 6
 
-    if df_shots.empty:
-        return go.Figure()
-
-    fig = build_goal_probability_heatmap(df_shots)
-    return fig
-
-# =========================
-# SCORING PROBABILITY HEATMAP
-# =========================
-@callback(
-    Output("scoring-probability-heatmap", "figure"),
-    Input("url", "pathname"),
-)
-def update_scoring_probability_heatmap(_):
-
-    df_events = load_event_data(shots_only=False)
-
+    df_events = load_event_data_kpis(match_id)
     if df_events.empty:
-        return go.Figure()
+        return ["–"] * 6
 
-    fig = filter_outlier_shots_and_plot_heatmap(
-        df_events, prob_threshold=0.1, nb_buckets_x=24, nb_buckets_y=17
+    # 🔑 UI chỉ dùng để chọn teamID
+    team_id = (
+        df_events["homeTeamID"].iloc[0]
+        if team_side == "home"
+        else df_events["awayTeamID"].iloc[0]
     )
 
-    return fig
+    kpis = build_overview_team_kpis(df_events, team_id)
+    if not kpis:
+        return ["–"] * 6
 
-
-@callback(
-    Output("xg-calibration-curve", "figure"),
-    Input("model-selector", "value"),
-)
-def update_calibration_curve(selected_models):
-
-    if not selected_models:
-        return go.Figure()
-
-    df_test = load_xg_data(split="test")
-
-    fig = build_xg_calibration_figure(
-        df_test,
-        models=tuple(selected_models)
+    return (
+        kpis["shot_kpi"],
+        kpis["passes_kpi"],
+        f'{kpis["accuracy_kpi"]:.1f}%',
+        f'{kpis["mean_pass_length_kpi"]:.1f}',
+        kpis["duels_kpi"],
+        kpis["goals_kpi"],
     )
-
-    return fig
-
-
