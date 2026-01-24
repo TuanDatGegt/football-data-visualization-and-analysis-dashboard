@@ -19,8 +19,8 @@ class create_soccer_Pitch:
         self.direction = attacking_direction
 
         themes = {
-            "tactical": {"pitch": "#121212", "line": "#FFFFFF", "goal": "#ffffff", "heatmap": "Viridis"},
-            "classic": {"pitch": "#224422", "line": "#FFFFFF", "goal": "#FFFFFF", "heatmap": "Hot"},
+            "tactical": {"pitch": "#f5f7fa", "line": "#2c2c2c", "goal": "#1a1a1a", "heatmap": "YlOrRd"},
+            "classic": {"pitch": "#0CE834", "line": "#FFFFFF", "goal": "#FFFFFF", "heatmap": "Hot"},
             "white": {"pitch": "white", "line": "#222222", "goal": "#000000", "heatmap": "YlGnBu"}
         }
         self.theme = themes.get(theme, themes["tactical"])
@@ -440,7 +440,7 @@ class create_soccer_Pitch:
                     x=[row["centroidX1"], row["centroidX2"]],
                     y=[row["centroidY1"], row["centroidY2"]],
                     mode="lines", showlegend=False,
-                    line=dict(color="#FFD700", width=row.get("sharePasses", 1)*20),
+                    line=dict(color="#693030", width=row.get("sharePasses", 1)*20),
                     opacity=0.3
                 ))
 
