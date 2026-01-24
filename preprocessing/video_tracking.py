@@ -39,6 +39,8 @@ FIELD_WIDTH = 68
 
 #--------------------------------
 #load file
+
+
 def load_raw_parquet(game: int):
     
     df_event_raw = pd.read_parquet(DATA_EXTRACTION_FOLDER / f"event_tracking_raw_{game}.parquet")
