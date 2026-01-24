@@ -59,7 +59,7 @@ class MachineLearningHelp:
     
 
     @staticmethod
-    def create_variable_graph(df, col, target_col, y1_axis_name = "Share obs. (%)", y2_axis_name = "Target prob. (%)", binned_cols = False, title_name = None):
+    def create_variable_graph(df, col, target_col, y1_axis_name = "Tỷ trọng số cú sút (%)", y2_axis_name ="Xác suất ghi bàn (%)", binned_cols = False, title_name = None):
         """
         Docstring for create_variable_graph
         
@@ -104,12 +104,12 @@ class MachineLearningHelp:
 
         #howver text
         hovertext_variable = [
-            f"Value: {row[col]} <br>Share obs.: {row['share']:.2f}"
+            f"Giá trị: {row[col]} <br>Tỉ trọng cú sút (%): {row['share']:.2f}"
             for _, row in df_group.iterrows()
         ]
 
         hovertext_target = [
-            f"Value: {row[col]} <br>Target prob. (%): {row['share_target']:.2f}"
+            f"Giá trị: {row[col]} <br>Tỉ lệ ghi bàn (%): {row['share_target']:.2f}"
             for _, row in df_group.iterrows()
         ]
 
