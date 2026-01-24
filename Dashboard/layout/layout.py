@@ -35,9 +35,9 @@ def sidebar():
             dcc.Dropdown(
                 id="match-dropdown",
                 options=[
-                    {"label": "Match 2500045", "value": 2500045},
+                    {"label": "Match 2500920", "value": 2500920},
                 ],
-                value=2500045,                # ✅ GẮN MATCH ID
+                value=2500920,                # ✅ GẮN MATCH ID
                 clearable=False,
                 className="mb-2",
             ),
@@ -75,8 +75,8 @@ def sidebar():
                 className="mt-1",
             ),
         ],
-        width=2,
-        className="bg-light vh-100 px-2",
+        width=9,
+        className="bg-light vh-100 px-3",
     )
 
 
@@ -219,7 +219,7 @@ def video_section():
 
 
 # ===============================
-# MAIN LAYOUT
+# MAIN LAYOUT (WITH TABS)
 # ===============================
 def create_layout():
     return dbc.Container(
@@ -230,31 +230,68 @@ def create_layout():
 
             dbc.Row(
                 [
+                    # =========================
                     # SIDEBAR
+                    # =========================
                     dbc.Col(sidebar(), width=2),
 
-                    # MAIN CONTENT
+                    # =========================
+                    # MAIN CONTENT (TABS)
+                    # =========================
                     dbc.Col(
-                        [
-                            # =========================
-                            # MODEL & LEAGUE ANALYSIS
-                            # =========================
-                            dbc.Row(
-                                [
-                                    dbc.Col(heatmap_section(), width=4),
-                                    dbc.Col(model_section(), width=8),
-                                ]
-                            ),
+                        dbc.Tabs(
+                            id="main-tabs",
+                            active_tab="tab-model",
+                            children=[
+                                # ==================================================
+                                # TAB 1: MODEL & LEAGUE ANALYSIS
+                                # ==================================================
+                                dbc.Tab(
+                                    label="Model & League",
+                                    tab_id="tab-model",
+                                    children=[
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(heatmap_section(), width=4),
+                                                dbc.Col(model_section(), width=8),
+                                            ]
+                                        )
+                                    ],
+                                ),
 
-                            html.Hr(),
+                                # ==================================================
+                                # TAB 2: TEAM & MATCH ANALYSIS
+                                # ==================================================
+                                dbc.Tab(
+                                    label="Team & Match",
+                                    tab_id="tab-team",
+                                    children=[
+                                        team_kpi_cards(),
+                                        video_section(),
+                                    ],
+                                ),
 
-                            # =========================
-                            # TEAM & MATCH ANALYSIS
-                            # =========================
-                            team_kpi_cards(),
-
-                            video_section(),
-                        ],
+                                # ==================================================
+                                # TAB 3: FUTURE (PLACEHOLDER)
+                                # ==================================================
+                                dbc.Tab(
+                                    label="Future",
+                                    tab_id="tab-future",
+                                    children=[
+                                        dbc.Alert(
+                                            "This section is reserved for future analysis modules.",
+                                            color="secondary",
+                                            className="mt-3",
+                                        )
+                                        # TODO:
+                                        # - Tactical patterns
+                                        # - Pressing sequences
+                                        # - Player clustering
+                                        # - Advanced tracking analytics
+                                    ],
+                                ),
+                            ],
+                        ),
                         width=10,
                     ),
                 ]
@@ -262,3 +299,4 @@ def create_layout():
         ],
         fluid=True,
     )
+
