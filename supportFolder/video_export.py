@@ -1,146 +1,13 @@
-"""
-video_export.py
-----------------
-Utilities for exporting pseudo tracking animations
-(MP4 only, no Plotly / no Kaleido)
-
-Author: Soccer Analyst
-"""
-
-from pathlib import Path
-import shutil
-
-import matplotlib.pyplot as plt
-from matplotlib.animation import FFMpegWriter
-
-from supportFolder.plot_pitch import create_soccer_Pitch
-
-
-# =========================================================
-# PROJECT PATH
-# =========================================================
-ROOT = Path(__file__).resolve().parents[1]
-
-VIDEO_DIR = ROOT / "dataset" / "video_"
-VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# =========================================================
-# UTILS
-# =========================================================
-def _check_ffmpeg():
-    """Ensure ffmpeg is available."""
-    if shutil.which("ffmpeg") is None:
-        raise RuntimeError(
-            "ffmpeg not found. Install it with:\n"
-            "sudo apt install ffmpeg"
-        )
-
-
-# =========================================================
-# CORE: TRACKING DF -> MP4
-# =========================================================
-def save_phase_mp4(
-    tracking_df,
-    match_id: int,
-    phase_idx: int,
-    fps: int = 10,
-    dpi: int = 100,
-    figsize=(12, 8),
-):
-    """
-    Save pseudo tracking animation as MP4 (H.264).
-
-    Parameters
-    ----------
-    tracking_df : pd.DataFrame
-        Pseudo tracking dataframe (ONE phase)
-        Required columns: ['frame', 'xPos', 'yPos', 'team']
-    match_id : int
-        Match ID used for output filename
-    phase_idx : int
-        Phase index (for logging / review only)
-    fps : int
-        Frames per second
-    dpi : int
-        Video resolution control
-    figsize : tuple
-        Figure size in inches
-    """
-    _check_ffmpeg()
-
-    out_path = VIDEO_DIR / f"video_{match_id}.mp4"
-
-    fig, ax = plt.subplots(figsize=figsize)
-
-    writer = FFMpegWriter(
-        fps=fps,
-        metadata={
-            "title": f"Match {match_id} | Phase {phase_idx}",
-            "artist": "Soccer Analyst",
-        },
-        codec="libx264",
-        bitrate=1800,
-    )
-
-    frames = sorted(tracking_df["frame"].unique())
-
-    with writer.saving(fig, out_path, dpi=dpi):
-        for frame_id in frames:
-            ax.clear()
-
-            # Draw pitch
-            create_soccer_Pitch(ax)
-
-            frame_df = tracking_df[tracking_df["frame"] == frame_id]
-
-            # Plot players & ball
-            for team, color in {
-                "Home": "#3498db",
-                "Away": "#e74c3c",
-                "Ball": "#000000",
-            }.items():
-                team_df = frame_df[frame_df["team"] == team]
-                if not team_df.empty:
-                    ax.scatter(
-                        team_df["xPos"],
-                        team_df["yPos"],
-                        s=60 if team != "Ball" else 30,
-                        c=color,
-                        edgecolors="white",
-                        linewidths=0.5,
-                        zorder=3,
-                    )
-
-            ax.set_title(
-                f"Match {match_id} | Phase {phase_idx} | Frame {frame_id}",
-                fontsize=10,
-            )
-
-            writer.grab_frame()
-
-    plt.close(fig)
-
-    print(
-        f"✅ Saved MP4 | match_id={match_id} | "
-        f"phase={phase_idx} | path={out_path}"
-    )
-
-
-"""
-mpl_video_animator.py
----------------------
-Matplotlib-based video animator for pseudo tracking (MP4 export)
-
-Author: Soccer Analyst
-"""
-
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from matplotlib.patches import Rectangle, Circle, Arc
 import pandas as pd
 
+from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_VIDEO_DIR = ROOT / "dataset" / "video_"
+DEFAULT_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ===============================
@@ -268,13 +135,20 @@ class MPLFootballAnimator:
         tracking_df: pd.DataFrame,
         fps: int = 10,
         pitch_length: int = 105,
-        pitch_width: int = 68
+        pitch_width: int = 68,
+        matchID: int = None,
+        phase_idx: int = None,
+        video_dir: Path = DEFAULT_VIDEO_DIR
     ):
         self.df = tracking_df.copy()
         self.fps = fps
         self.pitch_length = pitch_length
         self.pitch_width = pitch_width
 
+        self.matchID = matchID
+        self.phase_idx = phase_idx
+        self.video_dir = video_dir
+        
         required_cols = {"frame", "xPos", "yPos", "team", "entityType"}
         missing = required_cols - set(self.df.columns)
         if missing:
@@ -340,7 +214,26 @@ class MPLFootballAnimator:
     # ===============================
     # SAVE MP4
     # ===============================
-    def save_mp4(self, out_path):
+    def save_mp4(self, out_path: str| Path | None = None):
+
+        owners = self.df[self.df["entityType"] == "PLAYER_OWNER"]
+
+        team_labels = (
+            owners["team"].value_counts().idxmax()
+            if not owners.empty else "Unknown"
+        )
+
+
+        if out_path is None:
+            if self.matchID is None or self.phase_idx is None:
+                raise ValueError(
+                    "Hoặc cung cấp out_path HOẶC thiết lập match_id & phase_idx để tự động tạo tên tệp."
+                )
+
+            out_path = (self.video_dir /
+                f"match_{self.matchID}_phase_{self.phase_idx}_{team_labels}.mp4")
+            
+
         writer = FFMpegWriter(fps=self.fps)
 
         ani = FuncAnimation(
@@ -350,7 +243,7 @@ class MPLFootballAnimator:
             interval=1000 / self.fps
         )
 
-        ani.save(out_path, writer=writer)
+        ani.save(str(out_path), writer=writer)
         plt.close(self.fig)
 
         print(f"✅ Saved MP4: {out_path}")
