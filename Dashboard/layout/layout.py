@@ -1,3 +1,4 @@
+# Dashboard/layout/layout.py
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
@@ -6,7 +7,7 @@ import dash_bootstrap_components as dbc
 # SIDEBAR
 # ===============================
 def sidebar():
-    return dbc.Col(
+    return html.Div(
         [
             html.H5(
                 "Soccer Analyst",
@@ -23,7 +24,7 @@ def sidebar():
                 options=[
                     {"label": "Demo League", "value": "demo_league"},
                 ],
-                value="demo_league",          # ✅ GẮN VALUE
+                value="demo_league",
                 clearable=False,
                 className="mb-2",
             ),
@@ -34,27 +35,25 @@ def sidebar():
             html.Small("Match", className="fw-bold text-muted"),
             dcc.Dropdown(
                 id="match-dropdown",
-                options=[
-                    {"label": "Match 2500920", "value": 2500920},
-                ],
-                value=2500920,                # ✅ GẮN MATCH ID
+                options=[],
+                value=None,
                 clearable=False,
                 className="mb-2",
             ),
 
             # =========================
-            # TEAM
+            # TEAM (VIDEO SIDE)
             # =========================
-            html.Small("Team", className="fw-bold text-muted"),
+            html.Small("Video Side", className="fw-bold text-muted"),
             dbc.RadioItems(
                 id="team-radio",
                 options=[
                     {"label": "Home", "value": "home"},
                     {"label": "Away", "value": "away"},
                 ],
-                value="home",                 # ✅ GẮN TEAM SIDE
+                value="home",
                 inline=True,
-                className="mb-2",
+                className="mb-3",
             ),
 
             html.Hr(className="my-2"),
@@ -70,15 +69,13 @@ def sidebar():
                     {"label": "Shooting", "value": "shot"},
                     {"label": "Tracking", "value": "tracking"},
                 ],
-                value=["pass", "shot"],       # ✅ CÓ VALUE (OPTIONAL)
+                value=["pass", "shot"],
                 switch=True,
                 className="mt-1",
             ),
         ],
-        width=9,
-        className="bg-light vh-100 px-3",
+        className="bg-light vh-100 px-3 pt-2",
     )
-
 
 
 # ===============================
@@ -190,30 +187,38 @@ def video_section():
     return dbc.Card(
         [
             dbc.CardHeader("Video Tracking"),
-
             dbc.CardBody(
                 [
-                    dcc.Dropdown(
-                        id="phase-dropdown",
-                        placeholder="Select phase",
-                        clearable=False,
-                        className="mb-2",
+                    html.Div(
+                        [
+                            html.Small("Phase", className="fw-bold text-muted"),
+                            dcc.Slider(
+                                id="phase-slider",
+                                min=1,
+                                max=1,
+                                step=1,
+                                value=1,
+                                marks={},
+                                tooltip={"placement": "bottom", "always_visible": True},
+                            ),
+                        ],
+                        className="mb-3",
                     ),
 
                     html.Video(
                         id="video-player",
-                        key="video-player",
                         controls=True,
                         style={
                             "width": "100%",
-                            "aspectRatio": "16 / 9",   # Chrome, Edge OK
-                            "backgroundColor": "black",
-                        },
+                            "height": "auto",
+                            "backgroundColor": "black"
+                        }
                     ),
                 ]
             ),
         ]
     )
+
 
 
 
@@ -233,7 +238,11 @@ def create_layout():
                     # =========================
                     # SIDEBAR
                     # =========================
-                    dbc.Col(sidebar(), width=2),
+                    dbc.Col(
+                        sidebar(),
+                        width=2,
+                        className="p-0"
+                    ),
 
                     # =========================
                     # MAIN CONTENT (TABS)
