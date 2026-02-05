@@ -118,13 +118,16 @@ class MachineLearningHelp:
 
         fig.add_trace(
             go.Bar(
-                x = df_group[col],
-                y = df_group["share"],
+                x=df_group[col],
+                y=df_group["share"],
                 name=y1_axis_name,
-                hoverinfo="text",
-                text = hovertext_variable,
+                hoverinfo="skip",
+                text=hovertext_variable,
+                textposition="none",   # ⬅️ QUAN TRỌNG
                 marker=dict(color=DEFAULT_PLOTLY_COLORS[0]),
-            ), secondary_y=False)
+            ),
+            secondary_y=False
+        )
         
         fig.add_trace(
             go.Scatter(
@@ -137,6 +140,7 @@ class MachineLearningHelp:
             ), secondary_y=True)
         
         fig.update_layout(
+            height= 650,
             yaxis=dict(
                 title=dict(
                     text=y1_axis_name,
