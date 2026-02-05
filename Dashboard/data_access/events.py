@@ -1,13 +1,16 @@
-import pandas as pd
+# Dashboard/data_access/events.py
 from pathlib import Path
+import pandas as pd
 
+DASHBOARD_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = DASHBOARD_ROOT.parent
 
-ROOT = Path(__file__).resolve().parents[2]
-DATASET_DIR = ROOT / "dataset"
-
+DATASET_DIR = PROJECT_ROOT / "dataset"
 DATA_TRANSFORM_DIR = DATASET_DIR / "data_transforms"
 DATA_MODEL_DIR = DATASET_DIR / "dataModel"
-VIDEO_DIR = DATASET_DIR / "video_"
+
+ASSETS_DIR = DASHBOARD_ROOT / "assets"
+VIDEO_DIR = ASSETS_DIR / "video"
 
 
 def load_event_data(
@@ -64,21 +67,39 @@ def load_xg_data(split="train"):
     return pd.read_parquet(path)
 
 
-
-
 def list_video_phases(match_id: int):
     """
-    Return available phase IDs for a match
+    Return available phase IDs for a match (from assets/video)
     """
     if not VIDEO_DIR.exists():
         return []
 
-    phases = []
-    for p in VIDEO_DIR.glob(f"video_{match_id}_phase*.mp4"):
+    phases = set()
+
+    for p in VIDEO_DIR.glob(f"match_{match_id}_phase_*_*.mp4"):
         try:
-            phase_id = int(p.stem.split("phase")[-1])
-            phases.append(phase_id)
-        except ValueError:
+            phase = int(p.stem.split("_phase_")[1].split("_")[0])
+            phases.add(phase)
+        except (IndexError, ValueError):
             continue
 
     return sorted(phases)
+
+
+def list_matches_with_video():
+    """
+    Return sorted list of match IDs that have videos
+    """
+    if not VIDEO_DIR.exists():
+        return []
+
+    match_ids = set()
+
+    for p in VIDEO_DIR.glob("match_*_phase_*_*.mp4"):
+        try:
+            match_id = int(p.stem.split("_")[1])
+            match_ids.add(match_id)
+        except (IndexError, ValueError):
+            continue
+
+    return sorted(match_ids)
