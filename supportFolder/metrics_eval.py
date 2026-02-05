@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from sklearn import metrics
 import plotly.graph_objects as go
 from supportFolder.heatmap_xG import compute_calibration_data   # hoặc cùng file
@@ -143,4 +144,112 @@ def build_xg_calibration_figure(
 
 
     return fig
+
+
+def build_roc_curve_figure(
+    df,
+    models=("lr", "rf", "svm"),
+    y_col="Goal"
+):
+    fig = go.Figure()
+
+    MODEL_CONFIG = {
+        "lr": {
+            "col": "prediction_lr",
+            "label": "Logistic Regression"
+        },
+        "rf": {
+            "col": "prediction_rf",
+            "label": "Random Forest"
+        },
+        "svm": {
+            "col": "prediction_svm",
+            "label": "SVM (RBF)"
+        }
+    }
+
+    y_true = df[y_col].values
+
+    for m in models:
+        if m not in MODEL_CONFIG:
+            continue
+
+        cfg = MODEL_CONFIG[m]
+        y_prob = df[cfg["col"]].values
+
+        fpr, tpr, _ = metrics.roc_curve(y_true, y_prob)
+        auc_score = metrics.roc_auc_score(y_true, y_prob)
+
+        fig.add_trace(
+            go.Scatter(
+                x=fpr,
+                y=tpr,
+                mode="lines",
+                name=cfg["label"]
+            )
+        )
+
+    # Random guess line
+    fig.add_trace(
+        go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode="lines",
+            name="Random guess",
+            line=dict(dash="dash", color="gray")
+        )
+    )
+
+    fig.update_layout(
+        title="ROC Curves for xG Models",
+        xaxis_title="False Positive Rate (1 - Specificity)",
+        yaxis_title="True Positive Rate (Sensitivity)",
+
+        # 🔴 QUAN TRỌNG: khóa tỉ lệ trục
+        xaxis=dict(range=[0, 1], constrain="domain"),
+        yaxis=dict(range=[0, 1], scaleanchor="x", scaleratio=1),
+
+        template="plotly_white",
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.25,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(t=60, b=90)
+    )
+
+    return fig
+
+
+
+def assign_predicted_label(df, prob_col, threshold):
+    df = df.copy()
+    df["y_pred"] = (df[prob_col] >= threshold).astype(int)
+    return df
+
+
+def compute_confusion_counts(df, label_col="Goal", pred_col="y_pred"):
+    TP = ((df[label_col] == 1) & (df[pred_col] == 1)).sum()
+    FP = ((df[label_col] == 0) & (df[pred_col] == 1)).sum()
+    TN = ((df[label_col] == 0) & (df[pred_col] == 0)).sum()
+    FN = ((df[label_col] == 1) & (df[pred_col] == 0)).sum()
+
+    return {
+        "TP": TP,
+        "FP": FP,
+        "TN": TN,
+        "FN": FN
+    }
+
+
+def build_confusion_df(df, prob_col, threshold):
+    df_pred = assign_predicted_label(df, prob_col, threshold)
+    counts = compute_confusion_counts(df_pred)
+
+    return pd.DataFrame([counts])
+
+
+
 
