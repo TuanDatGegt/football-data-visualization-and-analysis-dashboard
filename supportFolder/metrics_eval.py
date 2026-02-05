@@ -205,7 +205,6 @@ def build_roc_curve_figure(
         xaxis_title="False Positive Rate (1 - Specificity)",
         yaxis_title="True Positive Rate (Sensitivity)",
 
-        # 🔴 QUAN TRỌNG: khóa tỉ lệ trục
         xaxis=dict(range=[0, 1], constrain="domain"),
         yaxis=dict(range=[0, 1], scaleanchor="x", scaleratio=1),
 
