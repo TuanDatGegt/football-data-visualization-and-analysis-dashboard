@@ -123,7 +123,7 @@ class MachineLearningHelp:
                 name=y1_axis_name,
                 hoverinfo="skip",
                 text=hovertext_variable,
-                textposition="none",   # ⬅️ QUAN TRỌNG
+                textposition="none",
                 marker=dict(color=DEFAULT_PLOTLY_COLORS[0]),
             ),
             secondary_y=False
