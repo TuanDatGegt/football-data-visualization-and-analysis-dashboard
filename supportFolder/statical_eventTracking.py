@@ -237,8 +237,6 @@ def number_pass_accurate(df_events, team_id):
 PITCH_LENGTH = 105.0
 PITCH_WIDTH = 68.0
 
-GOAL_CENTER_HOME = (0.0, PITCH_WIDTH / 2)
-GOAL_CENTER_AWAY = (PITCH_LENGTH, PITCH_WIDTH / 2)
 
 PASS_SUBEVENTS = {
     "Cross", "Hand pass", "Head pass",
@@ -259,14 +257,17 @@ def valid_pos(x, y):
 
 
 def get_attacking_goal(row):
-    is_home = row["teamID"] == row["homeTeamID"]
-    is_first_half = row["matchPeriod"] == "1H"
+    x0=row["posBeforeXMeters"]
 
-    if is_first_half:
-        return GOAL_CENTER_AWAY if is_home else GOAL_CENTER_HOME
-    else:
-        return GOAL_CENTER_HOME if is_home else GOAL_CENTER_AWAY
+    if pd.isna(x0):
+        return None
     
+    if x0 > PITCH_LENGTH/2:
+        return (PITCH_LENGTH, PITCH_WIDTH/2)
+    
+    else:
+        return (0.0, PITCH_WIDTH/2)
+
 
 def infer_ball_target(row):
     x0, y0 = row["posBeforeXMeters"], row["posBeforeYMeters"]
@@ -276,9 +277,17 @@ def infer_ball_target(row):
     sub = row.get("subEventName", "")
     is_goal = row.get("Goal", 0) == 1
 
-    # SHOT → GOAL
-    if event == "Shot" and is_goal:
-        return get_attacking_goal(row)
+    # SHOT
+    if event == "Shot":
+        if is_goal:
+            goal = get_attacking_goal(row)
+            if goal:
+                return goal
+            
+            return x0, y0
+        else:
+            return x0, y0
+    
 
     # PASS / CLEARANCE / TOUCH
     if event == "Pass" or sub in PASS_SUBEVENTS or sub in {"Clearance", "Touch"}:
@@ -286,16 +295,27 @@ def infer_ball_target(row):
             return x1, y1
         return x0, y0
 
+
     # SAVE ATTEMPT
     if event == "Save attempt":
         if valid_pos(x1, y1):
             return x1, y1
-        gx, gy = get_attacking_goal(row)
-        return gx + (2 if gx == 0 else -2), gy
+        
+        goal = get_attacking_goal(row)
+        if goal:
+            gx, gy = goal
+            offset_x = -2 if gx == PITCH_LENGTH else 2
+            return gx + offset_x, gy
+        
+        return x0, y0
+    
 
-    # DUEL → bóng rung nhẹ
+    # DUEL
     if event == "Duel" or sub in DUEL_SUBEVENTS:
-        return x0 + np.random.uniform(-1, 1), y0 + np.random.uniform(-1, 1)
+        return (
+            x0 + np.random.uniform(-1, 1),
+            y0 + np.random.uniform(-1, 1))
+
 
     # FOUL / INTERRUPTION
     if event == "Foul" or sub in STOP_SUBEVENTS:
@@ -306,14 +326,18 @@ def infer_ball_target(row):
 
 def event_to_ball_frames(row, fps=25):
     x0, y0 = row["posBeforeXMeters"], row["posBeforeYMeters"]
-    if pd.isna(x0) or pd.isna(y0):
+    if not valid_pos(x0, y0):
         return []
 
     xt, yt = infer_ball_target(row)
 
-    if np.isclose([x0, y0], [xt, yt]).all():
-        return [{"xPos": x0, "yPos": y0}]
 
+    if not valid_pos(xt, yt):
+        return [{"xPos": x0, "yPos": y0}]
+    
+    if np.isclose([x0, y0], [xt, yt]).all():
+        return [{"xPos":x0, "yPos": y0}]
+    
     xs = np.linspace(x0, xt, fps)
     ys = np.linspace(y0, yt, fps)
 
