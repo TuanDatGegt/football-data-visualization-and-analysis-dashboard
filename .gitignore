@@ -1,4 +1,6 @@
 .env
 __pycache__/
 dataset/
-Dashboard/assets/videos/
+Dashboard/assets/
+__init__.py
+Dashboard/callbacks/animation.py
